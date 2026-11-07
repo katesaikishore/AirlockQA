@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '../app-context';
 import { usePolling } from '../hooks';
 import { formatNumber, formatPercent, formatRelative, isActive, targetHost } from '../lib';
+import type { QaRunSummary } from '../qa';
 import type { RunSummary } from '../types';
 import { Card, CodeBlock, Kpi, Loading, PageHeader, RetryBlock, StatusPill } from '../ui';
 import { UsageCard } from './UsageCard';
@@ -26,10 +27,13 @@ function runsThisWeek(days: OverviewAnalytics['days']): number {
   return days.filter((day) => String(day.date) >= cutoff).reduce((sum, day) => sum + (Number(day.runs) || 0), 0);
 }
 
-function RecentRun({ run }: { run: RunSummary }) {
+/** A row on Overview: a cloud run (workflow) or a QA run, each linking to its own screen. */
+interface OverviewRow { id: string; suiteName: string; targetUrl: string; status: string; createdAt: string; queuePosition?: number | null; kind: 'run' | 'qa' }
+
+function RecentRun({ run }: { run: OverviewRow }) {
   return (
     <li className="lv-recent-item">
-      <a className="lv-recent-link" href={'#run-detail/' + encodeURIComponent(run.id)}>
+      <a className="lv-recent-link" href={run.kind === 'qa' ? '#qa/' + encodeURIComponent(run.id) : '#run-detail/' + encodeURIComponent(run.id)}>
         <span className="lv-recent-main">
           <strong>{run.suiteName}</strong>
           <span className="lv-muted lv-small">{targetHost(run.targetUrl)}</span>
@@ -63,18 +67,27 @@ export default function Overview(_props: { param: string }) {
   const [analytics, setAnalytics] = useState<OverviewAnalytics | null>(null);
   const [analyticsError, setAnalyticsError] = useState<unknown>(null);
   const [loadingKpis, setLoadingKpis] = useState(true);
-  const [recent, setRecent] = useState<RunSummary[] | null>(null);
+  const [recent, setRecent] = useState<OverviewRow[] | null>(null);
   const [recentError, setRecentError] = useState<unknown>(null);
-  const recentRef = useRef<RunSummary[]>([]);
+  const [qaRuns, setQaRuns] = useState<QaRunSummary[]>([]);
+  const recentRef = useRef<OverviewRow[]>([]);
 
   const loadRecent = useCallback(async () => {
-    const result = await call(() => api.runs.list({ limit: 5 }));
+    // Workflow runs and QA runs are separate lists on the server; Overview shows both, newest first.
+    const [workflow, qa] = await Promise.allSettled([call(() => api.runs.list({ limit: 5 })), call(() => api.qaRuns(20))]);
+    if (workflow.status === 'rejected') throw workflow.reason;
+    const qaList = qa.status === 'fulfilled' ? (qa.value.runs || []) : [];
+    setQaRuns(qaList);
+    const rows: OverviewRow[] = [
+      ...(workflow.value.runs || []).map((r) => ({ id: r.id, suiteName: r.suiteName, targetUrl: r.targetUrl, status: r.status, createdAt: r.createdAt, queuePosition: r.queuePosition, kind: 'run' as const })),
+      ...qaList.map((r) => ({ id: r.id, suiteName: 'QA · ' + (r.repo ? r.repo.replace(/^https:\/\/github\.com\//, '') : 'run'), targetUrl: r.repo || '', status: r.status, createdAt: r.createdAt || '', kind: 'qa' as const })),
+    ].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 8);
     const previous = recentRef.current;
-    const next = result.runs || [];
+    const next = rows;
     recentRef.current = next;
     setRecent(next);
     setRecentError(null);
-    if (statusChanged(previous, next)) void refreshUsage();
+    if (statusChanged(previous as unknown as RunSummary[], next as unknown as RunSummary[])) void refreshUsage();
   }, [api, call, refreshUsage]);
 
   const reload = useCallback(async () => {
@@ -90,7 +103,7 @@ export default function Overview(_props: { param: string }) {
   }, [api, call, loadRecent]);
 
   useEffect(() => { void reload(); }, [reload]);
-  useEffect(() => { if (recent) reportRuns('overview', recent); }, [recent, reportRuns]);
+  useEffect(() => { if (recent) reportRuns('overview', recent.filter((r) => r.kind === 'run') as unknown as RunSummary[]); }, [recent, reportRuns]);
   useEffect(() => () => reportRuns('overview', []), [reportRuns]);
   usePolling(loadRecent, (recent || []).some((run) => isActive(run.status)));
 
@@ -104,6 +117,9 @@ export default function Overview(_props: { param: string }) {
   const totals = analytics?.totals;
   const finished = Boolean(totals && Number(totals.runs) > 0);
   const empty = recent !== null && recent.length === 0 && !recentError && !(totals && totals.runs);
+  // QA runs from the last 7 days (UTC), counted next to the cloud runs.
+  const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  const qaThisWeek = qaRuns.filter((r) => r.createdAt && Date.parse(r.createdAt) >= weekAgo).length;
 
   let kpis;
   if (loadingKpis) kpis = <Loading text="Loading metrics" />;
@@ -111,7 +127,7 @@ export default function Overview(_props: { param: string }) {
   else {
     kpis = (
       <>
-        <Kpi label="Runs this week" value={formatNumber(runsThisWeek(analytics.days))} foot="Last 7 days, UTC" />
+        <Kpi label="Runs this week" value={formatNumber(runsThisWeek(analytics.days) + qaThisWeek)} foot={qaThisWeek ? `Last 7 days, UTC · ${qaThisWeek} QA` : 'Last 7 days, UTC'} />
         <Kpi label="Pass rate" value={finished ? formatPercent(totals?.passRate) : '—'} foot="Last 30 days" />
         <Kpi label="Requests allowed" value={formatNumber(totals?.requestsAllowed)} foot="Last 30 days" />
         <Kpi label="Requests blocked" value={formatNumber(totals?.requestsBlocked)} foot="Last 30 days" />
