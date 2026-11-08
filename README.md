@@ -246,6 +246,7 @@ Install a browser with `bunx playwright install chromium`. The CLI uses `AIRLOCK
 - [Encrypted local sync](docs/local-sync.md): what `airlock sync` uploads, how the key works and its limits.
 - [GitHub Action](docs/github-action.md): run Airlock QA on a pull request with `katesaikishore/AirlockQA@v1`.
 - [Case study](docs/case-study-fixture-app.md): the signed fixture-app run with 11 findings and 5 screenshots.
+- [QA Index](docs/qa-index/2026-11.md): the November 2026 public check of five real OSS apps, including the MoneyMatter issue.
 - [Product boundary](docs/product-boundary.md): exactly what runs in the hosted service and what stays local.
 - [Product claims and implementation plan](docs/five-impossible-moats-implementation-plan.md): the status of each advertised capability.
 
