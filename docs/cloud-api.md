@@ -163,6 +163,17 @@ Limits: 2 MB per artifact, 200 artifacts and 50 MB per workspace. The service ca
 `AIRLOCK_SYNC_KEY` makes the uploaded artifacts unreadable. These are backups/transfers, not executable fixtures or
 cross-run checkpoints.
 
+### Pro waitlist (public)
+
+`POST /v1/waitlist` records interest in private repositories, SSO and the rest of the Pro plan. It is public,
+origin-checked and rate-limited (5 requests per hour per IP). It creates no account and sends no email. The same
+email is idempotent.
+
+```json
+{ "email": "you@company.com", "useCase": "Private repo QA", "source": "pricing" }
+```
+`201 {"ok": true}`.
+
 ## Evidence
 
 Each finished run has a bundle in the `2.0.0` evidence format, signed with the service's Ed25519 key. Verify it with `airlock audit` and `AIRLOCK_TRUSTED_PUBLIC_KEY` set to the key from `GET /v1/evidence-key`, or with `POST /v1/evidence/verify`. A bundle shows that the recorded ledger was not changed after signing. It does not show that the target application is secure and it is not a compliance assessment.
