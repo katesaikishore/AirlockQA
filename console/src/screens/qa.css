@@ -28,3 +28,13 @@
 .qa-source { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .qa-source-first { background: #E2F2E9; color: #1F6B4F; }
 .qa-source-self { background: #EEF2EE; color: #46544C; }
+
+/* QA severity badges used on the Overview and findings tables. */
+.qa-sev { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 800; letter-spacing: .03em; }
+.qa-sev-s1, .qa-sev-s2 { background: #FDECEA; color: #B42318; }
+.qa-sev-s3 { background: #FFF4E5; color: #8A4B06; }
+.qa-sev-s4 { background: #EEF2EE; color: #46544C; }
+.qa-sev-unknown { background: #F2F4F2; color: #5A6961; }
+#ov-qa-findings-table td:first-child { width: 1%; white-space: nowrap; }
+#analytics-qa-note { margin: 20px 0 0; }
+#live-dashboard > .lv-card:last-child { margin-top: 18px; }

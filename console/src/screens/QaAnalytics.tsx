@@ -4,7 +4,7 @@ import { formatRatio, type QaAnalytics } from '../qa';
 import { Card, Kpi, Loading, RetryBlock } from '../ui';
 
 /** Fail and flake rates over suite results, suite hotspots, and the distinct findings stored for QA runs. */
-export function QaAnalyticsPanel() {
+export function QaAnalyticsPanel({ title = 'Analytics' }: { title?: string } = {}) {
   const { api, call } = useApp();
   const [data, setData] = useState<QaAnalytics | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -89,7 +89,7 @@ export function QaAnalyticsPanel() {
 
   return (
     <section className="qa-analytics" id="qa-analytics" aria-labelledby="qa-analytics-title">
-      <h2 id="qa-analytics-title" className="lv-card-title">Analytics</h2>
+      <h2 id="qa-analytics-title" className="lv-card-title">{title}</h2>
       <div id="qa-analytics-content">{content}</div>
     </section>
   );

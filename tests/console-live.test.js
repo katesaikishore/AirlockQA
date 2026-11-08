@@ -95,6 +95,36 @@ function makeDetail(summary, extra) {
   };
 }
 
+function makeQaRun(overrides) {
+  const id = (overrides && overrides.id) || 'run_qa_aaaaaaaa1111';
+  return {
+    id,
+    status: 'FAILED',
+    phase: 'TESTS_FAILED',
+    repo: 'https://github.com/acme/app',
+    sha: 'a'.repeat(40),
+    branch: 'main',
+    createdAt: iso(-120_000),
+    finishedAt: iso(-60_000),
+    suites: [{ suite: 'explore', status: 'FAIL' }],
+    gate: { exitCode: 1, reasons: ['explore: S2 HTTP 500 from GET /api/stats'] },
+    gateMode: 'strict',
+    ...overrides,
+  };
+}
+
+function emptyQaAnalytics(overrides) {
+  return {
+    runs: 0,
+    suiteResults: 0,
+    failRate: { failed: 0, total: 0 },
+    flakeRate: { flaky: 0, total: 0 },
+    hotspots: [],
+    findings: [],
+    ...(overrides || {}),
+  };
+}
+
 function usageInfo(used) {
   return {
     plan: 'free',
@@ -110,6 +140,8 @@ function createMock(options) {
     workspace: { id: 'ws_1', name: 'Acme QA', plan: 'free', createdAt: iso(-86_400_000 * 5), limits: { dailyRuns: 100 } },
     used: 12,
     runs: [],
+    qaRuns: [],
+    qaAnalytics: emptyQaAnalytics(),
     details: new Map(),
     keys: [],
     calls: [],
@@ -145,6 +177,8 @@ async function installMock(context, mock) {
       mock.workspace = { ...mock.workspace, name: JSON.parse(request.postData() || '{}').name };
       return json(200, mock.workspace);
     }
+    if (apiPath === '/v1/qa-runs' && method === 'GET') return json(200, { runs: mock.qaRuns || [] });
+    if (apiPath === '/v1/qa-analytics') return json(200, mock.qaAnalytics || emptyQaAnalytics());
     if (apiPath === '/v1/analytics') {
       const days = Number(url.searchParams.get('days') || 30);
       const list = [];
@@ -207,7 +241,7 @@ async function installMock(context, mock) {
   });
 }
 
-async function openConsole(mock, hash, config) {
+async function openConsole(mock, hash, config, basePath = '/console') {
   const context = await browser.newContext(config && config.demo ? {} : {});
   if (config && config.demo) {
     await context.addInitScript(() => { window.sessionStorage.setItem('airlock-demo-session', 'preview'); });
@@ -216,12 +250,22 @@ async function openConsole(mock, hash, config) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto(origin + '/console' + (hash || ''));
+  await page.goto(origin + basePath + (hash || ''));
   return { context, page, errors };
 }
 
 async function withConsole(mock, hash, config, check) {
   const session = await openConsole(mock, hash, config);
+  try {
+    await check(session.page, session);
+  } finally {
+    await session.context.close();
+  }
+}
+
+/** The built React console is served at /app; /console is the legacy page in the local server. */
+async function withApp(mock, hash, check) {
+  const session = await openConsole(mock, hash, undefined, '/app');
   try {
     await check(session.page, session);
   } finally {
@@ -286,6 +330,54 @@ describe('Console modes', () => {
       expect(text).toContain('Start a cloud run');
       expect(text).toContain('airlock login');
       expect(text).toContain('airlock test --cloud');
+    });
+  });
+
+  it('shows QA runs and findings when there are no workflow runs', async () => {
+    const mock = createMock({
+      runs: [],
+      qaRuns: [makeQaRun()],
+      qaAnalytics: emptyQaAnalytics({
+        runs: 2,
+        suiteResults: 4,
+        failRate: { failed: 2, total: 4 },
+        hotspots: [{ suite: 'explore', failures: 2 }],
+        findings: [{ fingerprint: 'fp_qa_1', firstSeenSha: 'a'.repeat(40), buildsOpen: 2, klass: 'http_5xx', severity: 'S2', assertion: 'HTTP 500 from GET /api/stats', route: '/dashboard' }],
+      }),
+    });
+    mock.handlers['GET /v1/analytics'] = (route, { json }) => json(200, { days: [], totals: { runs: 0, passRate: null, medianMs: null, requestsAllowed: 0, requestsBlocked: 0 } });
+    await withApp(mock, '', async (page, session) => {
+      await page.waitForSelector('#ov-qa-findings-table');
+      expect(await page.locator('.lv-onboard').count()).toBe(0);
+      const recent = await page.locator('#ov-recent').innerText();
+      expect(recent).toContain('QA run');
+      expect(recent).toContain('github.com/acme/app');
+      const findings = await page.locator('#ov-qa-findings').innerText();
+      expect(findings).toContain('HTTP 500 from GET /api/stats');
+      expect(findings).toContain('S2');
+      const text = await page.locator('#live-dashboard').innerText();
+      expect(text).toContain('QA findings');
+      expect(text).toContain('50%');
+    });
+  });
+
+  it('shows QA analytics on the Analytics page', async () => {
+    const mock = createMock({
+      runs: [],
+      qaRuns: [makeQaRun()],
+      qaAnalytics: emptyQaAnalytics({
+        runs: 1,
+        suiteResults: 1,
+        failRate: { failed: 1, total: 1 },
+        findings: [{ fingerprint: 'fp_qa_2', firstSeenSha: 'a'.repeat(40), buildsOpen: 1, klass: 'console_error', severity: 'S3', assertion: 'console error on reports', route: '/reports' }],
+      }),
+    });
+    await withApp(mock, '#analytics', async (page) => {
+      await page.waitForSelector('#qa-analytics-content');
+      const qa = await page.locator('#qa-analytics').innerText();
+      expect(qa).toContain('QA analytics');
+      expect(qa).toContain('console error on reports');
+      expect(await page.locator('#analytics-qa-note').innerText()).toContain('separate stream');
     });
   });
 

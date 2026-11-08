@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../app-context';
 import { formatDuration, formatNumber, formatPercent } from '../lib';
 import { Card, Kpi, Loading, PageHeader, RetryBlock } from '../ui';
+import { QaAnalyticsPanel } from './QaAnalytics';
+import './qa.css';
 
 interface AnalyticsDay { date: string; runs: number; success: number; failed: number }
 interface AnalyticsData {
@@ -114,8 +116,13 @@ export default function Analytics(_props: { param: string }) {
 
   return (
     <main className="lv-main" id="live-analytics">
-      <PageHeader title="Analytics" subtitle="How your hosted runs are doing. Days are UTC." actions={ranges} />
+      <PageHeader title="Analytics" subtitle="Hosted workflow runs, plus QA results below. Days are UTC." actions={ranges} />
       <div id="analytics-content">{content}</div>
+      <p className="lv-muted lv-small" id="analytics-qa-note">
+        QA runs are a separate stream: they are not counted in the workflow totals above. Their suite results, hotspots and
+        findings are below.
+      </p>
+      <QaAnalyticsPanel title="QA analytics" />
     </main>
   );
 }
