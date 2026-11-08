@@ -66,3 +66,6 @@ Use the moving major tag:
 
 Pin a full release tag if you need an immutable action. The action follows the same MIT license as the rest of the
 repository.
+
+
+AirlockQA is free for public repositories. The Pro waitlist for private repositories, SSO and longer retention is at https://qbrin.cloud/pricing/.

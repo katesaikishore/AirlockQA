@@ -54,3 +54,6 @@ airlock qa --repo https://github.com/owner/repo --sha <commit> --suites smoke,ex
 ```
 
 The fixture app is intentionally vulnerable and slow. Do not deploy it as a template for production.
+
+
+AirlockQA is free for public repositories. The Pro waitlist for private repositories, SSO and longer retention is at https://qbrin.cloud/pricing/.

@@ -205,6 +205,7 @@ export default function Settings(_props: { param: string }) {
                 <div className="lv-meta-item"><dt>Active API keys</dt><dd>{String(usage.limits.maxActiveKeys)}</dd></div>
               </dl>
             ) : <p className="lv-muted">Limits are unavailable right now.</p>}
+            <p className="lv-muted">Need private repositories, more concurrency or SSO? <a className="lv-link" href="/pricing/">Join the Pro waitlist</a>.</p>
           </div>
         </div>
       </Card>
