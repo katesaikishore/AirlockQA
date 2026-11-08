@@ -1,0 +1,98 @@
+# Airlock QA on a pull request. Copy this file to .github/workflows/airlock-qa.yml in your repository.
+#
+# Required secret: AIRLOCK_API_KEY (create one at https://qbrin.cloud under CI/CD & API).
+# The repository must be public and the PR head commit must be pushed to GitHub. Secrets are not available to pull
+# requests from forks; run the workflow from a branch in this repository, or use a self-hosted runner / GitHub App.
+#
+# What it does: builds and starts the app in Airlock's sandbox, runs the repository's own unit/e2e scripts and/or
+# Airlock's browser checker, saves failure screenshots, uploads the report, and comments on the PR.
+name: Airlock QA
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Get the AirlockQA CLI
+        run: |
+          git clone --depth 1 https://github.com/katesaikishore/AirlockQA .airlock-cli
+          (cd .airlock-cli && bun install --frozen-lockfile)
+
+      - name: Prepare the QA request
+        run: |
+          mkdir -p .airlock-qa
+          if [ -f airlock.config.json ]; then
+            # Remove test:explore so the suite runs Airlock's own checker (and takes screenshots) instead of the
+            # repository's script. Keep every other suite and setting.
+            jq 'del(.qa.scripts["test:explore"])' airlock.config.json > .airlock-qa/airlock.config.json
+          else
+            echo '{"qa":{"healthPath":"/","scripts":{}}}' > .airlock-qa/airlock.config.json
+          fi
+
+      - name: Run QA
+        # Add unit,e2e to --suites when the repository has test scripts; smoke,explore needs no test script.
+        # --gate strict fails on any requested suite that failed or did not run.
+        continue-on-error: true
+        env:
+          AIRLOCK_API_KEY: ${{ secrets.AIRLOCK_API_KEY }}
+          QA_REPO: https://github.com/${{ github.repository }}
+          QA_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          QA_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          cd .airlock-qa
+          bun ../.airlock-cli/bin/airlock.ts qa \
+            --repo "$QA_REPO" --sha "$QA_SHA" --branch "$QA_BRANCH" \
+            --suites smoke,explore --gate strict --wait --json > qa.json
+
+      - name: Write the report
+        if: always()
+        run: |
+          if [ -s .airlock-qa/qa.json ]; then
+            ID=$(jq -r '.id // empty' .airlock-qa/qa.json)
+            if [ -n "$ID" ]; then
+              bun .airlock-cli/bin/airlock.ts qa report "$ID" --out qa-report || true
+            fi
+          fi
+
+      - name: Upload the report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: airlock-qa-report
+          path: qa-report/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Comment on the pull request
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f qa-report/report.md ]; then
+            {
+              echo '<!-- airlock-qa -->'
+              echo
+              cat qa-report/report.md
+              echo
+              echo '_Screenshots are attached to the Airlock QA run artifact in this workflow._'
+            } > /tmp/airlock-qa-comment.md
+            gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/airlock-qa-comment.md
+          fi

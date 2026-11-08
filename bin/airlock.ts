@@ -745,25 +745,39 @@ program
 // ==========================================
 // COMMAND: QA (cloud QA runs; --dry-run only until the submit route exists)
 // ==========================================
-program
+const qa = program
   .command('qa')
   .description('Run QA on the pushed commit in Airlock Cloud. --dry-run prints the request without submitting it; --wait waits for the gate verdict.')
   .option('--dry-run', 'print the request that would be submitted, submit nothing')
   .option('--suites <list>', 'comma-separated suites (unit,integration,e2e,smoke,explore,a11y,security,load)', 'unit')
   .option('--gate <mode>', 'strict or default', 'default')
   .option('--continue-on-failure', 'still run a11y, security, load and explore after a failing test suite (build, start and smoke still stop the run)')
+  .option('--repo <url>', 'public GitHub repository URL to test (CI; default: the origin remote)')
+  .option('--sha <sha>', 'full commit SHA to test (CI; default: HEAD)')
+  .option('--branch <name>', 'branch name to record with the run (CI)')
+  .option('--json', 'print machine-readable JSON (for CI); suppress progress lines')
   .option('--wait', 'wait for the run to finish and exit 0 only if the gate passed')
   .action(async (opts) => {
     const { prepareQaDryRun, realQaDeps } = await import('../src/router/qa-cli.js');
     const suites = String(opts.suites).split(',').map((x: string) => x.trim()).filter(Boolean);
     const gate = opts.gate === 'strict' ? 'strict' : 'default';
-    const result = await prepareQaDryRun({ suites, gate, continueOnFailure: opts.continueOnFailure === true }, realQaDeps());
+    const result = await prepareQaDryRun(
+      {
+        suites,
+        gate,
+        continueOnFailure: opts.continueOnFailure === true,
+        ...(opts.repo ? { repo: opts.repo } : {}),
+        ...(opts.sha ? { sha: opts.sha } : {}),
+        ...(opts.branch ? { branch: opts.branch } : {}),
+      },
+      realQaDeps()
+    );
     if (!result.ok) {
       logger.error(result.message);
       process.exitCode = 1;
       return;
     }
-    for (const w of result.warnings) logger.warn(w);
+    if (!opts.json) for (const w of result.warnings) logger.warn(w);
     if (opts.dryRun) {
       console.log(JSON.stringify(result.body, null, 2));
       return;
@@ -778,15 +792,35 @@ program
     }
     const target = { apiUrl: auth.apiUrl, apiKey: auth.apiKey };
     const submitted = await submitQaRun(result.body, target);
-    logger.info(`QA run ${submitted.id} queued for ${result.body.repo}@${result.body.sha.slice(0, 7)}`);
-    if (!opts.wait) return;
+    if (!opts.json) logger.info(`QA run ${submitted.id} queued for ${result.body.repo}@${result.body.sha.slice(0, 7)}`);
+    if (!opts.wait) {
+      if (opts.json) console.log(JSON.stringify({ id: submitted.id, status: submitted.status }));
+      return;
+    }
     const run = await waitForQaRun(target, submitted.id, { intervalMs: 15_000, timeoutMs: 75 * 60_000 });
-    console.log(JSON.stringify(run, null, 2));
     const { verifyQaSeal } = await import('../src/router/qa-cli.js');
     const sealed = (run as { evidence?: unknown }).evidence;
-    logger.info(verifyQaSeal(sealed) ? 'Sealed result: signature verified with the service key' : 'Sealed result: NOT verified (missing or altered)');
-    process.exitCode = run.status === 'SUCCESS' && run.gate?.exitCode === 0 && verifyQaSeal(sealed) ? 0 : 1;
+    const sealVerified = verifyQaSeal(sealed);
+    if (opts.json) console.log(JSON.stringify({ id: submitted.id, run, sealVerified }));
+    else {
+      console.log(JSON.stringify(run, null, 2));
+      logger.info(sealVerified ? 'Sealed result: signature verified with the service key' : 'Sealed result: NOT verified (missing or altered)');
+    }
+    process.exitCode = run.status === 'SUCCESS' && run.gate?.exitCode === 0 && sealVerified ? 0 : 1;
   });
+
+qa
+  .command('report <runId>')
+  .description('Download a QA run (findings, screenshots) and write a report; optionally comment on or open a PR')
+  .option('--out <dir>', 'where to write report.md and screenshots/ (default: qa-reports/<runId>)')
+  .option('--pr <number>', 'post the report as a comment on this pull request')
+  .option('--repo <owner/repo>', 'GitHub repository for --pr or --create-pr (default: the current repository)')
+  .option('--create-pr', 'commit the report to a branch and open a pull request in the current repository')
+  .option('--title <title>', 'title for --create-pr')
+  .option('--api-url <url>', 'Airlock Cloud API base URL')
+  .action((runId: string, opts) =>
+    cloudAction(async () => (await import('../src/qa/report-command.js')).qaReportCommand(runId, opts))()
+  );
 
 // ==========================================
 // COMMAND: AI (a coding agent already signed in on this machine; no API key)

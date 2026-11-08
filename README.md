@@ -25,6 +25,9 @@ Read this table before relying on a feature. Each row describes what this reposi
 | `teleport` | Prototype | Generates a repro spec from a capsule file. It does not replay the capsule. |
 | Self-healing locators | Partial | `airlockLocator` accepts an optional healer for a fallback tier. Compiled specs do not pass one, so no healing runs by default. `healer.datasetDir` is used by the dataset command and console; `healer.confidenceThreshold` applies only when a caller passes the runner's healer. `healer.autoHeal` and `healer.saveMutations` are not read yet. |
 | `serve` (web console) | Partial | Evidence and checkpoint views read local files. Run lists and metrics are sample data. |
+| `qa` (hosted QA on a public repository) | Implemented (hosted) | Builds and starts a pushed commit of a public GitHub repo, runs smoke/unit/e2e/explore (and a11y/security/load when scripts are named), stores findings and failure screenshots, and seals the result. Public repos only; no env/secrets yet; one QA run at a time on the shared staging host. |
+| `qa report` | Implemented | Downloads a run, its findings and screenshots, writes `report.md`, can comment on a PR or open a report PR in a repository you own. |
+| `ai` (local agent help) | Implemented | `airlock ai ask/explain/doctor` uses an already-signed-in local coding agent; no model API key is stored by Airlock. |
 | Airlock Cloud (`login`, `test --cloud`, `usage`, `runs`) | Implemented (hosted) | A hosted service runs declarative workflows in an isolated browser and returns signed evidence. The free plan allows 100 runs per workspace per day. The service is operated separately and is not open source. |
 
 ## How it works
@@ -205,10 +208,12 @@ Each `run` writes `.airlock/compliance/latest-attestation.json` and an HTML repo
 [`.github/workflows/airlock-ci.yml`](.github/workflows/airlock-ci.yml) runs on pushes and pull requests to `main`. It:
 
 1. installs dependencies with the frozen lockfile and Playwright Chromium,
-2. builds, starts the demo store and waits for it to respond,
-3. runs `bun test`,
-4. runs the demo workflow and verifies its bundle,
-5. uploads `.airlock/compliance/` and `.airlock/dataset/` as an artifact for 30 days.
+2. builds the TypeScript and the React console,
+3. runs the Playwright + axe GUI suite,
+4. starts the demo store and waits for it to respond,
+5. runs `bun test`,
+6. runs the demo workflow and verifies its bundle,
+7. uploads `.airlock/compliance/`, `.airlock/dataset/` and `artifacts/gui-qa/pr/` as artifacts for 30 days.
 
 To produce bundles that can be verified later, add `AIRLOCK_SIGNING_KEY` as a repository secret.
 
@@ -216,11 +221,13 @@ To produce bundles that can be verified later, add `AIRLOCK_SIGNING_KEY` as a re
 
 | Command | Purpose |
 | :--- | :--- |
-| `bun run build` | Compile TypeScript to `dist/`. |
+| `bun run build` | Compile TypeScript to `dist/` and build the React console into `public/app/`. |
 | `bun test` | Run the test suite. |
 | `bun run cli <command>` | Run the CLI from source. |
 | `bun run demo:server` | Start the demo store on port 3900. |
 | `bun run qa:gui` | GUI smoke and axe accessibility suite with Playwright: the site, every console section, the dashboard recording and the demo store. Runs locally with no network, and in CI. `BASE_URL=<url>` tests a deployment instead. |
+| `bun run qa:report -- <runId>` | Download a QA run and write `report.md` plus screenshots; add `--create-pr` to open a report PR in the current repository. |
+| `bun run qa:hunt` | Run QA over the public repositories in `scripts/qa-hunt-repos.txt`, one at a time, and write a report for each. `--max`, `--suites`, `--create-pr`. |
 
 Install a browser with `bunx playwright install chromium`. The CLI uses `AIRLOCK_CHROME_PATH` when `browser.executablePath` is not set. The browser-based tests read `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` instead.
 
@@ -230,6 +237,8 @@ Install a browser with `bunx playwright install chromium`. The CLI uses `AIRLOCK
 - [Cloud API](docs/cloud-api.md): the hosted service's public API, limits and quota behaviour.
 - [Cloud client and service boundary](docs/cloud-api-auth-and-quota.md): what this repository contains and what it does not.
 - [QA test plan](docs/qa-test-plan.md): the flows covered by the GUI suite.
+- [QA on GitHub](docs/qa-github.md): the pull-request workflow, the report command and its limits.
+- [Go-to-market](docs/go-to-market.md): the open-source-to-cloud plan and the guardrails for public reports.
 - [Product claims and implementation plan](docs/five-impossible-moats-implementation-plan.md): the status of each advertised capability.
 
 ## License

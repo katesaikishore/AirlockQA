@@ -30,7 +30,9 @@
     "demo:server": "bun ./examples/demo-store/server.ts",
     "test:isolated": "bash scripts/test-isolated.sh",
     "console:dev": "vite --config console/vite.config.ts",
-    "console:typecheck": "tsc -p console/tsconfig.json"
+    "console:typecheck": "tsc -p console/tsconfig.json",
+    "qa:report": "bun ./bin/airlock.ts qa report",
+    "qa:hunt": "bun ./scripts/qa-hunt.ts"
   },
   "keywords": [
     "playwright",

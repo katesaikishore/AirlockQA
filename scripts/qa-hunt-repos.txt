@@ -1,0 +1,12 @@
+# Public web apps with a real server (not libraries). Start smaller; builds can take minutes.
+# One repository per line. Run: bun scripts/qa-hunt.ts --max 3
+umami-software/umami
+excalidraw/excalidraw
+outline/outline
+documenso/documenso
+twentyhq/twenty
+calcom/cal.com
+lobehub/lobehub
+n8n-io/n8n
+docmost/docmost
+immich-app/immich

@@ -1,5 +1,6 @@
 import type { CreateQaRunBody } from '../../cloud/shared/contract.js';
 import { cloudRequest } from './cloud-api.js';
+import { normalizeApiUrl } from './cloud-run-client.js';
 import { canonicalJson, verifyEd25519 } from '../utils/crypto.js';
 import { buildQaRunRequest, QaPreflightError, type BuildQaRunInput } from './qa-preflight.js';
 
@@ -16,6 +17,19 @@ export interface QaCliOptions {
   suites: string[];
   gate: 'strict' | 'default';
   continueOnFailure?: boolean;
+  /** CI overrides: the repository/commit to test instead of the checkout's origin and HEAD. */
+  repo?: string;
+  sha?: string;
+  branch?: string;
+}
+
+/** Accept both owner/repo and a full public GitHub URL for the CLI override. */
+export function normalizeGithubRepo(input: string): string {
+  const value = input.trim().replace(/\.git$/, '');
+  if (/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$/.test(value)) {
+    return `https://github.com/${value}`;
+  }
+  return value;
 }
 
 export type DryRunResult =
@@ -26,10 +40,10 @@ export type DryRunResult =
 export async function prepareQaDryRun(opts: QaCliOptions, deps: QaCliDeps): Promise<DryRunResult> {
   try {
     const [remoteUrl, sha, branch, dirty, config] = await Promise.all([
-      deps.readRemote(),
-      deps.readHead(),
-      deps.readBranch(),
-      deps.isDirty(),
+      opts.repo ? Promise.resolve(normalizeGithubRepo(opts.repo)) : deps.readRemote(),
+      opts.sha ? Promise.resolve(opts.sha.trim()) : deps.readHead(),
+      opts.branch ? Promise.resolve(opts.branch.trim()) : deps.readBranch(),
+      deps.isDirty().catch(() => false),
       deps.readConfig(),
     ]);
     const { body, warnings } = await buildQaRunRequest({
@@ -90,14 +104,33 @@ export interface QaTarget {
   fetcher?: typeof fetch;
 }
 
+export interface QaArtifactInfo {
+  name: string;
+  size: number;
+  sha256: string;
+  contentType: string;
+  route: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
 export interface QaRunDetail {
   id: string;
   status: string;
   phase: string | null;
+  repo?: string | null;
+  sha?: string | null;
+  branch?: string | null;
+  createdAt?: string | null;
+  finishedAt?: string | null;
   suites: Array<{ suite: string; status: string }>;
-  gate: { exitCode: number; reasons: string[] } | null;
+  gate: { exitCode: number; reasons: string[]; continueOnFailure?: boolean } | null;
+  gateMode?: string | null;
   failureReason?: string | null;
   error?: string | null;
+  findings?: Array<{ klass: string; severity: string; origin: string; route: string; assertion: string; fingerprint?: string }>;
+  artifacts?: QaArtifactInfo[];
+  evidence?: unknown;
 }
 
 const TERMINAL_QA = new Set(['SUCCESS', 'FAILED', 'CANCELLED']);
@@ -121,6 +154,34 @@ export async function waitForQaRun(
     if (Date.now() >= deadline) throw new QaPreflightError(`QA run ${id} did not finish in time (last status ${run.status})`);
     if (intervalMs > 0) await new Promise((r) => setTimeout(r, intervalMs));
   }
+}
+
+/** Fetch one QA run (used by the report command; waitForQaRun already polls this route). */
+export function getQaRun(target: QaTarget, id: string): Promise<QaRunDetail> {
+  return cloudRequest<QaRunDetail>(target, 'GET', `/v1/qa-runs/${encodeURIComponent(id)}`);
+}
+
+/** Screenshot metadata for a finished (or running) QA run. */
+export async function listQaArtifacts(target: QaTarget, id: string): Promise<QaArtifactInfo[]> {
+  const res = await cloudRequest<{ artifacts?: QaArtifactInfo[] }>(target, 'GET', `/v1/qa-runs/${encodeURIComponent(id)}/artifacts`);
+  return res.artifacts ?? [];
+}
+
+/** Download one screenshot. Binary route: JSON helpers cannot carry it, so this fetches the bytes directly. */
+export async function downloadQaArtifact(
+  target: QaTarget,
+  id: string,
+  name: string
+): Promise<{ bytes: Uint8Array; contentType: string }> {
+  if (!/^screenshot-[1-9][0-9]?\.(jpg|png)$/.test(name)) throw new Error(`invalid screenshot name: ${name}`);
+  const base = normalizeApiUrl(target.apiUrl);
+  const fetcher = target.fetcher ?? fetch;
+  const res = await fetcher(`${base}/v1/qa-runs/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(name)}`, {
+    headers: { Authorization: `Bearer ${target.apiKey}`, Accept: 'image/jpeg,image/png' },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) throw new Error(`screenshot ${name} download failed (HTTP ${res.status})`);
+  return { bytes: new Uint8Array(await res.arrayBuffer()), contentType: res.headers.get('content-type') ?? 'application/octet-stream' };
 }
 
 /** Check the service's signature over a sealed QA result, with the key the service published with that result. */
