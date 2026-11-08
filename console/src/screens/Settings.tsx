@@ -1,11 +1,109 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useApp } from '../app-context';
 import { formatDateTime, formatNumber } from '../lib';
-import { Card, ErrorBox, PageHeader } from '../ui';
+import { Card, ErrorBox, Loading, PageHeader, RetryBlock } from '../ui';
+import type { SyncedArtifact } from '../api';
 import type { Me } from '../types';
 
 type Workspace = Me['workspace'];
 type Outcome = { kind: 'error'; error: unknown } | { kind: 'ok' } | { kind: 'empty' } | null;
+
+function formatBytes(value: number): string {
+  if (value < 1024) return value + ' B';
+  if (value < 1024 * 1024) return (value / 1024).toFixed(1) + ' KB';
+  return (value / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+/** Encrypted artifacts synced from the local CLI. The server never has the key, so downloads are ciphertext. */
+function SyncedLocalData() {
+  const { api, call, announce } = useApp();
+  const [artifacts, setArtifacts] = useState<SyncedArtifact[] | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = async () => {
+    setError(null);
+    try {
+      const result = await call(() => api.syncArtifacts(50));
+      setArtifacts(result.artifacts || []);
+    } catch (caught) {
+      setError(caught);
+    }
+  };
+
+  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const download = async (artifact: SyncedArtifact) => {
+    setBusy(artifact.id);
+    try {
+      const blob = await api.downloadSyncArtifact(artifact.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = artifact.id + '.airlock-enc';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      announce('Encrypted artifact downloaded');
+    } catch (caught) {
+      setError(caught);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const remove = async (artifact: SyncedArtifact) => {
+    if (!window.confirm(`Delete the synced artifact "${artifact.name}"?`)) return;
+    setBusy(artifact.id);
+    try {
+      await call(() => api.deleteSyncArtifact(artifact.id));
+      setArtifacts((current) => (current || []).filter((item) => item.id !== artifact.id));
+      announce('Synced artifact deleted');
+    } catch (caught) {
+      setError(caught);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (error && artifacts === null) return <RetryBlock error={error} retry={() => { void load(); }} />;
+  if (artifacts === null) return <Loading text="Loading synced local data" />;
+  if (artifacts.length === 0) {
+    return (
+      <div className="lv-empty" id="sync-empty">
+        <p className="lv-muted">No local artifacts synced yet. Upload traces, checkpoints, healing logs, fixtures or capsules from your machine:</p>
+        <div className="lv-code-wrap"><pre className="lv-code"><code>AIRLOCK_SYNC_KEY='a long passphrase' airlock sync</code></pre></div>
+        <p className="lv-muted lv-small">The key stays on your machine; the server stores only AES-256-GCM ciphertext.</p>
+      </div>
+    );
+  }
+  return (
+    <div id="synced-local-data">
+      <p className="lv-muted lv-small">The server stores only encrypted bytes. Download an artifact and decrypt it with <code>airlock sync download &lt;id&gt; --out &lt;file&gt;</code>.</p>
+      <div className="lv-table-wrap">
+        <table className="lv-table lv-table-stack">
+          <caption className="sr-only">Synced local artifacts</caption>
+          <thead><tr><th scope="col">Kind</th><th scope="col">Name</th><th scope="col">Size</th><th scope="col">Added</th><th scope="col">Actions</th></tr></thead>
+          <tbody>
+            {artifacts.map((artifact) => (
+              <tr key={artifact.id}>
+                <td data-label="Kind" className="lv-mono">{artifact.kind}</td>
+                <td data-label="Name" className="lv-wrap">{artifact.name}</td>
+                <td data-label="Size" className="lv-mono">{formatBytes(artifact.plaintextSize)}</td>
+                <td data-label="Added">{formatDateTime(artifact.createdAt)}</td>
+                <td data-label="Actions">
+                  <div className="lv-actions">
+                    <button type="button" className="lv-btn lv-btn-small" disabled={busy === artifact.id} onClick={() => { void download(artifact); }}>Download</button>
+                    <button type="button" className="lv-btn lv-btn-small" disabled={busy === artifact.id} onClick={() => { void remove(artifact); }}>Delete</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export default function Settings(_props: { param: string }) {
   const { me, api, call, announce, signOut, usage, refreshUsage, setWorkspaceName } = useApp();
@@ -93,6 +191,7 @@ export default function Settings(_props: { param: string }) {
           {user?.name ? <div className="lv-meta-item"><dt>Name</dt><dd className="lv-wrap">{user.name}</dd></div> : null}
         </dl>
       </Card>
+      <Card title="Synced local data"><SyncedLocalData /></Card>
       <Card title="Plan">
         <div>
           <p><strong>Free</strong></p>

@@ -142,6 +142,7 @@ function createMock(options) {
     runs: [],
     qaRuns: [],
     qaAnalytics: emptyQaAnalytics(),
+    syncArtifacts: [],
     details: new Map(),
     keys: [],
     calls: [],
@@ -178,6 +179,7 @@ async function installMock(context, mock) {
       return json(200, mock.workspace);
     }
     if (apiPath === '/v1/qa-runs' && method === 'GET') return json(200, { runs: mock.qaRuns || [] });
+    if (apiPath === '/v1/sync/artifacts' && method === 'GET') return json(200, { artifacts: mock.syncArtifacts || [] });
     if (apiPath === '/v1/qa-analytics') return json(200, mock.qaAnalytics || emptyQaAnalytics());
     if (apiPath === '/v1/analytics') {
       const days = Number(url.searchParams.get('days') || 30);
@@ -684,6 +686,25 @@ describe('Keys, evidence, settings', () => {
       expect(text).toContain('6');
       await page.click('button[data-days="7"]');
       await page.waitForFunction(() => document.querySelectorAll('#analytics-content .lv-bar-col').length === 7);
+    });
+  });
+});
+
+describe('Synced local data', () => {
+  it('lists encrypted local artifacts in Settings', async () => {
+    const mock = createMock({
+      syncArtifacts: [{
+        id: 'sync_abc123', kind: 'checkpoint', name: '.airlock/checkpoints/paid.json',
+        plaintextSize: 2048, storedSize: 2200, sha256: 'a'.repeat(64), contentType: 'application/json',
+        encrypted: true, createdAt: iso(-3600_000),
+      }],
+    });
+    await withApp(mock, '#settings', async (page) => {
+      await page.waitForSelector('#synced-local-data');
+      const text = await page.locator('#synced-local-data').innerText();
+      expect(text).toContain('checkpoint');
+      expect(text).toContain('.airlock/checkpoints/paid.json');
+      expect(text).toContain('2.0 KB');
     });
   });
 });

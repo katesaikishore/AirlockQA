@@ -68,6 +68,18 @@ export interface Analytics {
   totals: { runs: number; passRate: number | null; medianMs: number | null; requestsAllowed: number; requestsBlocked: number };
 }
 
+export interface SyncedArtifact {
+  id: string;
+  kind: string;
+  name: string;
+  plaintextSize: number;
+  storedSize: number;
+  sha256: string;
+  contentType: string;
+  encrypted: boolean;
+  createdAt: string;
+}
+
 export const api = {
   health: () => request<unknown>('GET', '/health'),
   login: (email: string, password: string) => request<Me>('POST', '/v1/auth/login', { email, password }),
@@ -102,6 +114,13 @@ export const api = {
   qaRun: (id: string) => request<QaRunDetail>('GET', '/v1/qa-runs/' + encodeURIComponent(id)),
   qaRuns: (limit?: number) => request<{ runs: QaRunSummary[] }>('GET', '/v1/qa-runs' + query({ limit })),
   qaAnalytics: () => request<QaAnalytics>('GET', '/v1/qa-analytics'),
+  syncArtifacts: (limit?: number) => request<{ artifacts: SyncedArtifact[] }>('GET', '/v1/sync/artifacts' + query({ limit })),
+  deleteSyncArtifact: (id: string) => request<null>('DELETE', '/v1/sync/artifacts/' + encodeURIComponent(id)),
+  downloadSyncArtifact: async (id: string): Promise<Blob> => {
+    const response = await fetch(apiBase() + '/v1/sync/artifacts/' + encodeURIComponent(id), { credentials: 'same-origin' });
+    if (!response.ok) throw new ApiError(response.status, { code: 'INTERNAL', message: 'Could not download the synced artifact.' });
+    return response.blob();
+  },
   evidenceKey: () => request<unknown>('GET', '/v1/evidence-key'),
   verifyEvidence: (bundle: unknown) => request<unknown>('POST', '/v1/evidence/verify', bundle),
 };

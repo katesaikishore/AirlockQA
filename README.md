@@ -28,6 +28,7 @@ Read this table before relying on a feature. Each row describes what this reposi
 | `qa` (hosted QA on a public repository) | Implemented (hosted) | Builds and starts a pushed commit of a public GitHub repo, runs smoke/unit/e2e/explore (and a11y/security/load when scripts are named), stores findings and failure screenshots, and seals the result. Public repos only; no env/secrets yet; one QA run at a time on the shared staging host. |
 | `qa report` | Implemented | Downloads a run, its findings and screenshots, writes `report.md`, can comment on a PR or open a report PR in a repository you own. |
 | `ai` (local agent help) | Implemented | `airlock ai ask/explain/doctor` uses an already-signed-in local coding agent; no model API key is stored by Airlock. |
+| `sync` (encrypted local data) | Implemented | Uploads traces, checkpoints, healing logs, fixtures and capsules, encrypted on the client with `AIRLOCK_SYNC_KEY`. The server stores only ciphertext and metadata; 200 artifacts / 50 MB per workspace, 2 MB each. |
 | Airlock Cloud (`login`, `test --cloud`, `usage`, `runs`) | Implemented (hosted) | A hosted service runs declarative workflows in an isolated browser and returns signed evidence. The free plan allows 100 runs per workspace per day. The service is operated separately and is not open source. |
 
 ## How it works
@@ -90,6 +91,7 @@ The examples in this README use `airlock` for brevity. From a clone, substitute 
 | `airlock run [spec]` | Run `workflow` from the config (or `-w, --workflow <file>`), or a spec, then write signed evidence. `-u, --url`. |
 | `airlock fork <checkpoint>` | Restore a checkpoint into parallel contexts, one input per variation. `-v, --variations`, `--values`, `-i, --input`, `-a, --action`, `--expect-selector`, `--expect-text`, `-w, --workers`. |
 | `airlock audit [bundle]` | Verify a bundle's hash chain, Merkle root and signature. Exits 1 on failure. |
+| `airlock sync` | Encrypt and upload local traces, checkpoints, healing logs, fixtures and capsules. `--kind`, `--dry-run`, `--json`; `sync list`; `sync download <id> --out <file>`. |
 | `airlock login` | Save an Airlock Cloud API key in an owner-only file. The key is read from a hidden prompt, `AIRLOCK_API_KEY` or standard input. `--api-url`. |
 | `airlock logout` | Remove the saved key from this machine. |
 | `airlock whoami` | Show which key, endpoint and plan this machine uses. |
@@ -137,6 +139,7 @@ The main fields are documented in [docs/HOW-TO-USE.md](docs/HOW-TO-USE.md). A fe
 | `AIRLOCK_SIGNING_ALGORITHM` | `HMAC-SHA256` for a plain key; `Ed25519` when the key is a PEM private key. Set it to force an algorithm. |
 | `AIRLOCK_TRUSTED_PUBLIC_KEY` | Pins the expected Ed25519 signer for `airlock audit`. |
 | `AIRLOCK_CHECKPOINT_KEY` | Encrypts saved checkpoints at rest (AES-256-GCM). Without it, checkpoints are plain text and contain cookies, storage and page HTML. |
+| `AIRLOCK_SYNC_KEY` | Passphrase (12+ characters) used by `airlock sync` to encrypt local artifacts before upload. It never leaves the machine; losing it makes synced artifacts unreadable. |
 | `AIRLOCK_API_KEY` | Airlock Cloud key. Overrides the key saved by `airlock login`. Sent only as a Bearer token over HTTPS (plain HTTP is allowed only for localhost). |
 | `AIRLOCK_CLOUD_URL` | Cloud API base URL. Defaults to `https://api.qbrin.cloud`. Requires HTTPS except for localhost. A saved key is never sent to a different endpoint than the one it was saved for. |
 | `AIRLOCK_CONFIG_DIR` | Directory for the saved credentials (default `~/.config/airlock`). |
@@ -239,6 +242,7 @@ Install a browser with `bunx playwright install chromium`. The CLI uses `AIRLOCK
 - [QA test plan](docs/qa-test-plan.md): the flows covered by the GUI suite.
 - [QA on GitHub](docs/qa-github.md): the pull-request workflow, the report command and its limits.
 - [Go-to-market](docs/go-to-market.md): the open-source-to-cloud plan and the guardrails for public reports.
+- [Encrypted local sync](docs/local-sync.md): what `airlock sync` uploads, how the key works and its limits.
 - [Product claims and implementation plan](docs/five-impossible-moats-implementation-plan.md): the status of each advertised capability.
 
 ## License

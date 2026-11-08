@@ -823,6 +823,72 @@ qa
   );
 
 // ==========================================
+// COMMAND: SYNC (encrypted local artifacts to the account)
+// ==========================================
+const sync = program
+  .command('sync')
+  .description('Upload traces, checkpoints, healing logs, fixtures and capsules to your Airlock Cloud account, encrypted on this machine')
+  .option('--kind <list>', 'comma-separated: trace,checkpoint,healing,fixtures,capsule', 'trace,checkpoint,healing,fixtures,capsule')
+  .option('--dry-run', 'list what would be uploaded, send nothing')
+  .option('--json', 'print JSON')
+  .option('--api-url <url>', 'Airlock Cloud API base URL')
+  .action((opts) =>
+    cloudAction(async () => {
+      const { resolveCloudAuth } = await import('../src/router/cloud-credentials.js');
+      const { syncKeyFromEnv, uploadLocalArtifacts, SYNC_KINDS } = await import('../src/router/sync-command.js');
+      const auth = resolveCloudAuth({ apiUrl: opts.apiUrl });
+      if (!auth) throw new Error('Not signed in. Run "airlock login" (or set AIRLOCK_API_KEY) first.');
+      const kinds = String(opts.kind).split(',').map((value: string) => value.trim()).filter(Boolean);
+      for (const kind of kinds) if (!(SYNC_KINDS as readonly string[]).includes(kind)) throw new Error(`unknown sync kind: ${kind}`);
+      const key = opts.dryRun ? undefined : syncKeyFromEnv();
+      const result = await uploadLocalArtifacts(
+        { apiUrl: auth.apiUrl, apiKey: auth.apiKey },
+        process.cwd(),
+        key || '',
+        kinds as any,
+        { dryRun: opts.dryRun === true, log: opts.json ? () => undefined : undefined }
+      );
+      if (opts.json) console.log(JSON.stringify(result, null, 2));
+      else logger.info(`Synced ${result.uploaded} artifact${result.uploaded === 1 ? '' : 's'}${result.skipped ? `, skipped ${result.skipped}` : ''}.`);
+    })()
+  );
+
+sync
+  .command('list')
+  .description('List synced local artifacts for this account')
+  .option('--limit <n>', '1 to 100', '50')
+  .option('--json', 'print JSON')
+  .option('--api-url <url>', 'Airlock Cloud API base URL')
+  .action((opts) =>
+    cloudAction(async () => {
+      const { resolveCloudAuth } = await import('../src/router/cloud-credentials.js');
+      const { listSyncArtifacts } = await import('../src/router/sync-command.js');
+      const auth = resolveCloudAuth({ apiUrl: opts.apiUrl });
+      if (!auth) throw new Error('Not signed in. Run "airlock login" (or set AIRLOCK_API_KEY) first.');
+      const artifacts = await listSyncArtifacts({ apiUrl: auth.apiUrl, apiKey: auth.apiKey }, Number(opts.limit) || 50);
+      if (opts.json) console.log(JSON.stringify({ artifacts }, null, 2));
+      else if (artifacts.length === 0) console.log('No synced artifacts yet.');
+      else for (const a of artifacts) console.log(`${a.id}  ${a.kind.padEnd(10)}  ${String(a.plaintextSize).padStart(8)} B  ${a.name}`);
+    })()
+  );
+
+sync
+  .command('download <id>')
+  .description('Download and decrypt one synced artifact')
+  .option('--out <file>', 'where to write the decrypted file')
+  .option('--api-url <url>', 'Airlock Cloud API base URL')
+  .action((id: string, opts) =>
+    cloudAction(async () => {
+      const { resolveCloudAuth } = await import('../src/router/cloud-credentials.js');
+      const { syncKeyFromEnv, downloadSyncArtifact } = await import('../src/router/sync-command.js');
+      if (!opts.out) throw new Error('--out is required');
+      const auth = resolveCloudAuth({ apiUrl: opts.apiUrl });
+      if (!auth) throw new Error('Not signed in. Run "airlock login" (or set AIRLOCK_API_KEY) first.');
+      await downloadSyncArtifact({ apiUrl: auth.apiUrl, apiKey: auth.apiKey }, id, syncKeyFromEnv(), opts.out);
+    })()
+  );
+
+// ==========================================
 // COMMAND: AI (a coding agent already signed in on this machine; no API key)
 // ==========================================
 const ai = program
