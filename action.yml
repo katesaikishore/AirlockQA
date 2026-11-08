@@ -67,6 +67,7 @@ runs:
       continue-on-error: true
       env:
         AIRLOCK_API_KEY: ${{ inputs.api-key }}
+        GH_TOKEN: ${{ github.token }}
         QA_REPO: ${{ github.server_url }}/${{ github.repository }}
         QA_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         QA_BRANCH: ${{ github.head_ref || github.ref_name }}

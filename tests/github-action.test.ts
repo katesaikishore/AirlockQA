@@ -19,6 +19,7 @@ describe('Airlock QA GitHub Action', () => {
     expect(qa).toBeTruthy();
     expect(qa['continue-on-error']).toBe(true);
     expect(qa.env.QA_SHA).toContain('pull_request.head.sha');
+    expect(qa.env.GH_TOKEN).toContain('github.token');
     const report = steps.find((step) => step.name === 'Write the report');
     expect(report.if).toBe('always()');
     const upload = steps.find((step) => step.uses === 'actions/upload-artifact@v4');
