@@ -58,6 +58,8 @@ open-source presence is the funnel; the hosted app is the product. AirlockQA fol
 - [x] Failure screenshots stored with the run and downloadable from the API.
 - [x] `airlock qa report` writes a Markdown report and can open a PR in a repository we own.
 - [x] GitHub Action template runs on a pull request, uploads the report/screenshots and comments with the report.
+- [x] Reusable composite action: `katesaikishore/AirlockQA@v1`; callers only add a secret and a four-line workflow.
+- [ ] GitHub Marketplace listing for the action.
 - [ ] GitHub App: webhook, check run, comment, installation token, private repositories.
 - [ ] Private repositories and a secrets/env mechanism for builds.
 - [ ] More than one concurrent QA run (the staging host has four slots; the API currently allows one global QA run).
