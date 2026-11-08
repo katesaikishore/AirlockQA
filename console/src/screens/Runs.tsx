@@ -3,10 +3,10 @@ import { flushSync } from 'react-dom';
 import { useApp } from '../app-context';
 import { usePolling } from '../hooks';
 import { navigate } from '../router';
-import { STATUS_LABELS } from '../lib';
+import { STATUS_LABELS, formatRelative } from '../lib';
 import type { RunSummary } from '../types';
-import type { QaRunSummary } from '../qa';
-import { CodeBlock, Loading, PageHeader, RetryBlock } from '../ui';
+import { shortRepo, type QaRunSummary } from '../qa';
+import { CodeBlock, Loading, PageHeader, RetryBlock, StatusPill } from '../ui';
 import { RunsTable } from './RunsTable';
 import { StartRunForm } from './StartRunForm';
 import { RUN_STATUSES, useRunList } from './useRunList';
@@ -80,6 +80,24 @@ export default function Runs({ param }: { param: string }) {
             Cloud workflow runs are separate from QA runs.
             {qaRuns && qaRuns.length > 0 ? ` This workspace has ${qaRuns.length} recent QA run${qaRuns.length === 1 ? '' : 's'}; they are on the QA screen.` : ' QA runs are on the QA screen.'}
           </p>
+          {qaRuns && qaRuns.length > 0 ? (
+            <ul className="lv-recent" id="run-qa-preview">
+              {qaRuns.slice(0, 3).map((run) => (
+                <li className="lv-recent-item" key={run.id}>
+                  <a className="lv-recent-link" href={'#qa/' + encodeURIComponent(run.id)}>
+                    <span className="lv-recent-main">
+                      <strong>QA run</strong>
+                      <span className="lv-muted lv-small">{shortRepo(run.repo || '')}</span>
+                    </span>
+                    <span className="lv-recent-side">
+                      <StatusPill status={run.status} />
+                      <span className="lv-muted lv-small">{formatRelative(run.finishedAt || run.createdAt)}</span>
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <div className="lv-actions"><a className="lv-btn" href="#qa">Open QA runs</a></div>
           <p className="lv-muted">Start a cloud run with the button above, or from your terminal:</p>
           <CodeBlock text="airlock login" label="Copy" />

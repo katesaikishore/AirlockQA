@@ -376,6 +376,7 @@ describe('Console modes', () => {
       expect(text).toContain('No cloud workflow runs yet');
       expect(text).toContain('1 recent QA run');
       expect(await page.locator('#run-empty-state a[href="#qa"]').count()).toBeGreaterThan(0);
+      expect(await page.locator('#run-qa-preview').innerText()).toContain('QA run');
     });
   });
 
