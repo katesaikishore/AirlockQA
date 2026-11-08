@@ -380,6 +380,19 @@ describe('Console modes', () => {
     });
   });
 
+  it('Runs has a QA tab with the full QA table', async () => {
+    const mock = createMock({ runs: [], qaRuns: [makeQaRun()] });
+    await withApp(mock, '#runs', async (page) => {
+      await page.click('[data-run-tab="qa"]');
+      await page.waitForSelector('#qa-run-table-runs');
+      const text = await page.locator('#qa-run-table-runs').innerText();
+      expect(text).toContain('acme/app');
+      expect(text).toContain('run_qa_aaaaaaaa1111');
+      expect(text).toContain('Failed');
+      expect(text).toContain('explore');
+    });
+  });
+
   it('Evidence lists the sealed QA runs', async () => {
     const mock = createMock({ runs: [], qaRuns: [makeQaRun()] });
     await withApp(mock, '#evidence', async (page) => {

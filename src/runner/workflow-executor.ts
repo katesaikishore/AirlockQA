@@ -60,9 +60,15 @@ function describeTarget(step: WorkflowStep): string | undefined {
   switch (step.action) {
     case 'goto':
     case 'request':
+    case 'fixture':
       return step.url;
     case 'checkpoint':
+    case 'restoreCheckpoint':
       return step.name;
+    case 'warp':
+      return step.duration;
+    case 'chaos':
+      return step.selector;
     default:
       return step.selector;
   }
@@ -108,7 +114,42 @@ export async function executeWorkflow(workflow: Workflow, options: WorkflowExecu
           break;
         case 'checkpoint':
           await runner.checkpoint(step.name, page, context);
+          result.detail = `saved ${step.name}`;
           break;
+        case 'restoreCheckpoint': {
+          const restored = await runner.restoreCheckpoint(step.name, page, context);
+          if (!restored) throw new Error(`checkpoint '${step.name}' was not found`);
+          result.detail = `restored ${step.name}`;
+          break;
+        }
+        case 'warp': {
+          const warped = await runner.warpTime(step.duration, page, context);
+          result.detail = `${warped.durationString} -> ${warped.targetTimeIso} (${warped.scope})`;
+          break;
+        }
+        case 'fixture': {
+          // A page route wins over the context gateway route. The response is served locally; no upstream request is sent.
+          const fixtureUrl = resolveUrl(step.url, baseUrl);
+          const method = step.method;
+          await page.route((url) => url.toString() === fixtureUrl, async (route) => {
+            if (route.request().method() !== method) {
+              await route.fallback();
+              return;
+            }
+            await route.fulfill({ status: step.status, headers: step.headers, body: step.body });
+          });
+          result.detail = `${method} ${step.url} -> ${step.status}`;
+          break;
+        }
+        case 'chaos': {
+          const report = await runner.chaosAudit(
+            async () => { await page.locator(step.selector).click({ timeout }); },
+            step.endpointPattern ? { endpointPattern: step.endpointPattern } : {},
+            page
+          );
+          result.detail = `observation: ${report.status}${report.targetEndpoint && report.targetEndpoint !== 'Not observed' ? ` at ${report.targetEndpoint}` : ''}`;
+          break;
+        }
         case 'waitFor':
           await page.locator(step.selector).first().waitFor({ state: step.state, timeout });
           break;

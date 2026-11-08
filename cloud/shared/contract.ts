@@ -100,7 +100,7 @@ export const CreateRunBodySchema = z
     }
     const permitted = (hostname: string) => allowed.has(hostname) || suffixes.some((suffix) => hostname.endsWith(suffix));
     (body.workflow?.steps ?? []).forEach((step, index) => {
-      if (step.action !== 'goto' && step.action !== 'request') return;
+      if (step.action !== 'goto' && step.action !== 'request' && step.action !== 'fixture') return;
       let resolved: URL;
       try {
         resolved = new URL(step.url, body.targetUrl);

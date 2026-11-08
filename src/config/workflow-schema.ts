@@ -18,6 +18,23 @@ export const WorkflowStepSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('press'), selector, key: z.string().min(1) }),
   z.object({ action: z.literal('select'), selector, value: z.string() }),
   z.object({ action: z.literal('checkpoint'), name: z.string().min(1) }),
+  z.object({ action: z.literal('restoreCheckpoint'), name: z.string().min(1) }),
+  z.object({ action: z.literal('warp'), duration: z.string().min(1).max(40) }),
+  z.object({
+    action: z.literal('fixture'),
+    /** Absolute URL or a path relative to the workflow's base URL. The response is served in the page, not sent upstream. */
+    url: z.string().min(1).max(2048),
+    method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']).default('GET'),
+    status: z.number().int().min(100).max(599).default(200),
+    headers: z.record(z.string(), z.string()).default({}),
+    body: z.string().max(100_000).default(''),
+  }),
+  z.object({
+    action: z.literal('chaos'),
+    selector,
+    /** Optional URL fragment the observed mutation request must match. Observation only; no request is replayed. */
+    endpointPattern: z.string().max(200).optional(),
+  }),
   z.object({
     action: z.literal('waitFor'),
     selector,
