@@ -175,8 +175,7 @@ export default function Overview(_props: { param: string }) {
         <Kpi label="Cloud pass rate" value={finished ? formatPercent(totals?.passRate) : '—'} foot="Hosted workflow runs" />
         <Kpi label="QA fail rate" value={qa ? qaFailPercent(qa) : '—'} foot={qa ? `${Number(qa.failRate?.failed) || 0} of ${Number(qa.failRate?.total) || 0} suite results` : 'No finished QA runs'} />
         <Kpi label="QA findings" value={qa ? formatNumber(qaFindings.length) : '—'} foot={qaFindings.length ? `${qaSerious} S1/S2 · ${Number(qa?.runs) || 0} finished runs` : 'No findings stored'} />
-        <Kpi label="Requests allowed" value={formatNumber(totals?.requestsAllowed)} foot="Last 30 days" />
-        <Kpi label="Requests blocked" value={formatNumber(totals?.requestsBlocked)} foot="Last 30 days" />
+        <Kpi label="Requests allowed" value={formatNumber(totals?.requestsAllowed)} foot={`${formatNumber(totals?.requestsBlocked)} blocked · last 30 days`} />
       </>
     );
   }
