@@ -4,7 +4,7 @@ import { formatTime, initials } from './lib';
 import { VIEW_TITLES, navigate, type Route, type View } from './router';
 import './shell.css';
 
-interface NavEntry { nav: string; view: View; href: string; label: string; icon: string }
+interface NavEntry { nav: string; view: View; href: string; label: string; icon: string; tag?: string }
 interface NavGroup { title: string | null; tag?: string; items: NavEntry[] }
 
 const GROUPS: NavGroup[] = [
@@ -12,16 +12,16 @@ const GROUPS: NavGroup[] = [
     { nav: 'overview', view: 'dashboard', href: '#overview', label: 'Overview', icon: 'M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z' },
     { nav: 'runs', view: 'runs', href: '#runs', label: 'Runs', icon: 'M3 12h4l2.5-6 5 12 2.5-6h4' },
     { nav: 'qa', view: 'qa', href: '#qa', label: 'QA', icon: 'M9 3h6M10 3v5.5L5 18a2 2 0 0 0 1.7 3h10.6A2 2 0 0 0 19 18l-5-9.5V3M8 14h8' },
-    { nav: 'explorer', view: 'explorer', href: '#tests', label: 'Tests', icon: 'M10 6h10M10 12h10M10 18h10M4 6l1.2 1.2L7.5 5M4 12l1.2 1.2 2.3-2.2M4 18l1.2 1.2 2.3-2.2' },
+    { nav: 'explorer', view: 'explorer', href: '#tests', label: 'Tests', tag: 'Local', icon: 'M10 6h10M10 12h10M10 18h10M4 6l1.2 1.2L7.5 5M4 12l1.2 1.2 2.3-2.2M4 18l1.2 1.2 2.3-2.2' },
     { nav: 'analytics', view: 'analytics', href: '#analytics', label: 'Analytics', icon: 'M5 20V11M12 20V5M19 20v-8M3 20h18' },
   ] },
   { title: 'Build', items: [
-    { nav: 'recorder', view: 'recorder', href: '#recorder', label: 'Recorder', icon: 'M12 3.5a8.5 8.5 0 1 0 0 17a8.5 8.5 0 1 0 0-17zM12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z' },
-    { nav: 'healing', view: 'healing', href: '#healing', label: 'Self-healing', icon: 'M12 5a7 7 0 1 0 0 14a7 7 0 1 0 0-14zM12 2v3M12 19v3M2 12h3M19 12h3M12 10.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3z' },
-    { nav: 'checkpoints', view: 'checkpoints', href: '#checkpoints', label: 'Checkpoints', icon: 'M6 3.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5zM6 15.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5zM18 6.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5zM6 8.5v7M18 11.5c0 3.5-3.5 4.5-9.5 5.5' },
+    { nav: 'recorder', view: 'recorder', href: '#recorder', label: 'Recorder', tag: 'Local', icon: 'M12 3.5a8.5 8.5 0 1 0 0 17a8.5 8.5 0 1 0 0-17zM12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z' },
+    { nav: 'healing', view: 'healing', href: '#healing', label: 'Self-healing', tag: 'Local', icon: 'M12 5a7 7 0 1 0 0 14a7 7 0 1 0 0-14zM12 2v3M12 19v3M2 12h3M19 12h3M12 10.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3z' },
+    { nav: 'checkpoints', view: 'checkpoints', href: '#checkpoints', label: 'Checkpoints', tag: 'Local', icon: 'M6 3.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5zM6 15.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5zM18 6.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5zM6 8.5v7M18 11.5c0 3.5-3.5 4.5-9.5 5.5' },
   ] },
   { title: 'Protect', items: [
-    { nav: 'policy', view: 'policy', href: '#policy', label: 'Request policy', icon: 'M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5c-4.3-1.3-7.5-4.9-7.5-9.5V6z' },
+    { nav: 'policy', view: 'policy', href: '#policy', label: 'Request policy', tag: 'Local', icon: 'M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5c-4.3-1.3-7.5-4.9-7.5-9.5V6z' },
     { nav: 'audit', view: 'audit', href: '#evidence', label: 'Evidence', icon: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3' },
   ] },
   { title: 'Lab', tag: 'Preview', items: [
@@ -148,6 +148,7 @@ export function Sidebar({ route }: { route: Route }) {
                     <a key={item.nav} className={'cn-item' + (current ? ' is-active' : '')} href={item.href} data-nav={item.nav} aria-current={current ? 'page' : undefined}>
                       <Icon d={item.icon} />
                       <span className="cn-label">{item.label}</span>
+                      {item.tag ? <span className="cn-tag">{item.tag}</span> : null}
                       {badge ? (
                         <span className="cn-badge" hidden={app.activeRuns === 0} aria-label={`${app.activeRuns} active ${app.activeRuns === 1 ? 'run' : 'runs'}`}>{app.activeRuns}</span>
                       ) : null}

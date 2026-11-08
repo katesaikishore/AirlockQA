@@ -232,6 +232,12 @@ async function installMock(context, mock) {
       mock.keys.push(key);
       return json(201, { key, token: 'air_live_SECRETTOKEN0123456789' });
     }
+    const qaMatch = /^\/v1\/qa-runs\/([^/]+)$/.exec(apiPath);
+    if (qaMatch && method === 'GET') {
+      const run = (mock.qaRuns || []).find((item) => item.id === qaMatch[1]);
+      if (!run) return json(404, { code: 'NOT_FOUND', message: 'QA run not found' });
+      return json(200, { ...run, evidence: null, findings: [] });
+    }
     const keyMatch = /^\/v1\/keys\/([^/]+)$/.exec(apiPath);
     if (keyMatch && method === 'DELETE') {
       mock.keys = mock.keys.filter((key) => key.id !== keyMatch[1]);
@@ -358,6 +364,29 @@ describe('Console modes', () => {
       const text = await page.locator('#live-dashboard').innerText();
       expect(text).toContain('QA findings');
       expect(text).toContain('50%');
+    });
+  });
+
+  it('Runs points to the QA screen when the workspace has QA runs but no workflow runs', async () => {
+    const mock = createMock({ runs: [], qaRuns: [makeQaRun()] });
+    mock.handlers['GET /v1/analytics'] = (route, { json }) => json(200, { days: [], totals: { runs: 0, passRate: null, medianMs: null, requestsAllowed: 0, requestsBlocked: 0 } });
+    await withApp(mock, '#runs', async (page) => {
+      await page.waitForSelector('#run-empty-state');
+      const text = await page.locator('#run-empty-state').innerText();
+      expect(text).toContain('No cloud workflow runs yet');
+      expect(text).toContain('1 recent QA run');
+      expect(await page.locator('#run-empty-state a[href="#qa"]').count()).toBeGreaterThan(0);
+    });
+  });
+
+  it('Evidence lists the sealed QA runs', async () => {
+    const mock = createMock({ runs: [], qaRuns: [makeQaRun()] });
+    await withApp(mock, '#evidence', async (page) => {
+      await page.waitForSelector('#qa-evidence-list');
+      const text = await page.locator('#qa-evidence-list').innerText();
+      expect(text).toContain('QA run');
+      expect(text).toContain('No sealed result');
+      expect(text).toContain('acme/app');
     });
   });
 

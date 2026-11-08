@@ -5,6 +5,7 @@ import { usePolling } from '../hooks';
 import { navigate } from '../router';
 import { STATUS_LABELS } from '../lib';
 import type { RunSummary } from '../types';
+import type { QaRunSummary } from '../qa';
 import { CodeBlock, Loading, PageHeader, RetryBlock } from '../ui';
 import { RunsTable } from './RunsTable';
 import { StartRunForm } from './StartRunForm';
@@ -17,10 +18,11 @@ function runMatchesSearch(run: RunSummary, query: string): boolean {
 }
 
 export default function Runs({ param }: { param: string }) {
-  const { search, setSearch, refreshUsage } = useApp();
+  const { search, setSearch, refreshUsage, api, call } = useApp();
   const list = useRunList();
   const { runs, nextCursor, loaded, error, status } = list;
   const [formOpen, setFormOpen] = useState(false);
+  const [qaRuns, setQaRuns] = useState<QaRunSummary[] | null>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const suiteRef = useRef<HTMLInputElement>(null);
 
@@ -47,6 +49,17 @@ export default function Runs({ param }: { param: string }) {
 
   usePolling(() => list.load({ silent: true }), list.hasActive);
 
+  // QA runs are a separate list on the server. Show that they exist so an empty cloud-run list is not mistaken for
+  // an empty workspace.
+  useEffect(() => {
+    let stale = false;
+    call(() => api.qaRuns(5)).then(
+      (data) => { if (!stale) setQaRuns(Array.isArray(data.runs) ? data.runs : []); },
+      () => { if (!stale) setQaRuns([]); }
+    );
+    return () => { stale = true; };
+  }, [api, call]);
+
   const query = search.trim().toLowerCase();
   const visible = runs.filter((run) => (status === 'all' || run.status === status) && runMatchesSearch(run, query));
   const loadMore = nextCursor ? <button type="button" className="lv-btn" onClick={() => { void list.load({ more: true }); }}>Load more runs</button> : null;
@@ -62,7 +75,12 @@ export default function Runs({ param }: { param: string }) {
     if (visible.length === 0) {
       results = runs.length === 0 && status === 'all' && !query ? (
         <div className="lv-empty" id="run-empty-state">
-          <h2 className="lv-card-title">No runs yet</h2>
+          <h2 className="lv-card-title">No cloud workflow runs yet</h2>
+          <p className="lv-muted">
+            Cloud workflow runs are separate from QA runs.
+            {qaRuns && qaRuns.length > 0 ? ` This workspace has ${qaRuns.length} recent QA run${qaRuns.length === 1 ? '' : 's'}; they are on the QA screen.` : ' QA runs are on the QA screen.'}
+          </p>
+          <div className="lv-actions"><a className="lv-btn" href="#qa">Open QA runs</a></div>
           <p className="lv-muted">Start a cloud run with the button above, or from your terminal:</p>
           <CodeBlock text="airlock login" label="Copy" />
           <CodeBlock text="airlock test --cloud" label="Copy" />
@@ -81,7 +99,7 @@ export default function Runs({ param }: { param: string }) {
     <main className="lv-main" id="live-runs">
       <PageHeader
         title="Runs"
-        subtitle="Hosted browser runs on Airlock Cloud. The list refreshes every 3 seconds while a run is queued or running."
+        subtitle="Hosted workflow runs on Airlock Cloud. QA runs are a separate list on the QA screen."
         actions={<button type="button" className="lv-btn lv-btn-primary" id="start-run-toggle" ref={toggleRef} aria-expanded={formOpen} aria-controls="start-run-panel" onClick={() => setForm(!formOpen)}>Start cloud run</button>}
       />
       <section className="lv-card" id="start-run-panel" hidden={!formOpen} aria-labelledby="start-run-title">

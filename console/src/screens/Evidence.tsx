@@ -3,6 +3,7 @@ import { useApp, useSessionState } from '../app-context';
 import { formatDateTime, shortId } from '../lib';
 import { Card, CodeBlock, CopyButton, ErrorBox, Loading, PageHeader, RetryBlock, StatusPill } from '../ui';
 import type { RunSummary } from '../types';
+import { shortRepo, verifyQaSeal, type QaRunSummary, type SealCheck } from '../qa';
 
 interface KeyInfo { keyId?: string; algorithm?: string; publicKeyPem?: string }
 interface VerifyBody { valid?: boolean; reason?: unknown; warnings?: unknown }
@@ -141,12 +142,87 @@ function EvidenceList() {
   );
 }
 
+const SEAL_LABEL: Record<SealCheck['state'], string> = {
+  verified: 'Verified in this browser',
+  invalid: 'Signature does not match',
+  unavailable: 'Not checked in this browser',
+  unsupported: 'Unsupported algorithm',
+  missing: 'No sealed result',
+};
+
+/** QA runs are sealed too. This shows the latest seals and lets the browser verify them with the published key. */
+function QaEvidenceList() {
+  const { api, call } = useApp();
+  const [items, setItems] = useState<Array<{ run: QaRunSummary; state: SealCheck['state'] }> | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let stale = false;
+    setItems(null);
+    setError(null);
+    void (async () => {
+      try {
+        const list = await call(() => api.qaRuns(10));
+        const recent = (list.runs || [])
+          .filter((run) => ['SUCCESS', 'FAILED', 'CANCELLED'].includes(run.status))
+          .slice(0, 5);
+        const rows = await Promise.all(recent.map(async (run) => {
+          try {
+            const detail = await call(() => api.qaRun(run.id));
+            const check = await verifyQaSeal(detail.evidence);
+            return { run, state: check.state };
+          } catch {
+            return { run, state: 'missing' as const };
+          }
+        }));
+        if (!stale) setItems(rows);
+      } catch (caught) {
+        if (!stale) setError(caught);
+      }
+    })();
+    return () => { stale = true; };
+  }, [api, call, attempt]);
+
+  if (error) return <RetryBlock error={error} retry={() => setAttempt((value) => value + 1)} />;
+  if (!items) return <Loading text="Loading QA seals" />;
+  if (items.length === 0) {
+    return (
+      <div className="lv-empty" id="qa-evidence-empty">
+        <p className="lv-muted">No finished QA runs yet. QA results are sealed when a run finishes.</p>
+        <a className="lv-btn" href="#qa">Open QA</a>
+      </div>
+    );
+  }
+  return (
+    <ul className="lv-evidence-list" id="qa-evidence-list">
+      {items.map(({ run, state }) => (
+        <li className="lv-evidence-item" key={run.id}>
+          <a className="lv-evidence-row" href={'#qa/' + encodeURIComponent(run.id)} style={{ textDecoration: 'none' }}>
+            <div className="lv-evidence-main">
+              <span className="lv-link lv-run-link">QA run · {shortRepo(run.repo || '') || 'repository'}</span>
+              <div className="lv-small lv-muted">
+                <StatusPill status={run.status} /> {run.sha ? <span className="lv-mono">{run.sha.slice(0, 7)}</span> : null} · {formatDateTime(run.finishedAt || run.createdAt)}
+              </div>
+            </div>
+            <span className={'lv-pill ' + (state === 'verified' ? 'lv-pill-success' : state === 'invalid' ? 'lv-pill-failed' : 'lv-pill-queued')}>{SEAL_LABEL[state]}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function Evidence(_props: { param: string }) {
   return (
     <main className="lv-main" id="live-audit">
       <PageHeader title="Evidence" subtitle="Every finished cloud run has a signed evidence bundle. Verify it here, or on your own machine with the CLI." />
       <Card title="Service signing key"><SigningKey /></Card>
       <Card title="Runs with evidence"><div id="evidence-list"><EvidenceList /></div></Card>
+      <Card title="QA run seals">
+        <p className="lv-muted lv-small">QA runs have their own signed result. The browser checks each seal with the key the service published with it.</p>
+        <QaEvidenceList />
+      </Card>
     </main>
   );
 }

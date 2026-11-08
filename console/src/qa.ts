@@ -146,6 +146,7 @@ export interface QaRunSummary {
   gateMode?: string | null;
   gate: { exitCode: number; reasons: string[]; continueOnFailure?: boolean } | null;
   createdAt?: string | null;
+  finishedAt?: string | null;
   error?: string | null;
 }
 

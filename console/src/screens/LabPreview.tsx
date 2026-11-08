@@ -74,14 +74,15 @@ export default function LabPreview({ view }: { view: View }) {
         <div className="lv-head-text">
           <div className="lv-title-row">
             <h1 className="lv-title" tabIndex={-1}>{feature.title}</h1>
-            <span className="lv-badge-preview">Preview</span>
+            <span className="lv-badge-preview">Local CLI</span>
           </div>
           <p className="lv-sub">{feature.what}</p>
         </div>
       </div>
       <section className="lv-card" aria-labelledby={'local-' + view}>
         <h2 id={'local-' + view} className="lv-card-title">Runs on your machine</h2>
-        <p className="lv-muted">This feature is part of the local CLI. The hosted console does not run it or store its results yet, so there is nothing to show here.</p>
+        <p className="lv-muted">This feature is part of the local CLI. The hosted console does not run it or store its results yet, so there is no cloud data to show here. The commands below run on your machine.</p>
+        <p className="lv-small"><a className="lv-link" href="https://github.com/katesaikishore/AirlockQA/blob/main/docs/HOW-TO-USE.md" target="_blank" rel="noreferrer">Read the local guide</a></p>
         <div className="lv-stack">
           {feature.commands.map(([label, command]) => (
             <div key={command}>
