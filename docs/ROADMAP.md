@@ -12,6 +12,8 @@ This is a direction, not a promise. Dates are deliberately absent.
 
 ## Next
 
+- Framework-agnostic result ingest: JUnit XML first, then Cypress/WebdriverIO normalizers
+
 - First-class support for more Playwright project layouts and monorepos
 - Better flake attribution from request ledgers and traces
 - More CI providers beyond GitHub Actions
