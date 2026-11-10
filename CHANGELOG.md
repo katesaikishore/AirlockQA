@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0
+
+- `qafind hunt`: audit an existing Playwright suite for unawaited assertions, assertion-free tests, fixed waits, focused tests and tracked skips.
+- `qafind dedupe`: check a candidate against GitHub issues/PRs before filing.
+- `qafind verify`: record failing-repro / fixed-success evidence.
+- Hunt now ignores Vitest, Jest, Testing Library and `node:test` files so it does not emit Playwright-only false positives.
+
 ## 2.0.0
 
 - **Renamed to QAFind** (qafind.si). Breaking: the CLI is now `qafind` (the `airlock` command is gone), the npm package is `qafind`, the config file is `qafind.config.json`, the output directory is `.qafind/`, environment variables are `QAFIND_*` (e.g. `QAFIND_API_KEY`), and MCP tools are `qafind_*`.

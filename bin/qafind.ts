@@ -1364,4 +1364,148 @@ program
     if (!result.valid) process.exitCode = 1;
   });
 
+// ==========================================
+// COMMAND: HUNT (repository QA defects + duplicate gate)
+// ==========================================
+interface HuntCommandOptions {
+  json?: boolean;
+  minSeverity?: string;
+  repo?: string;
+  dedupe?: boolean;
+  limit?: string;
+}
+
+program
+  .command('hunt [path]')
+  .description('Audit an existing Playwright suite for QA defects, then check the repo issue tracker before anyone files a report')
+  .option('--json', 'Print the audit (and duplicate gates) as JSON')
+  .option('--min-severity <level>', 'Only show low, medium or high candidates', 'low')
+  .option('--repo <owner/name>', 'GitHub repository used for the duplicate gate')
+  .option('--no-dedupe', 'Skip the GitHub duplicate search')
+  .option('--limit <count>', 'Dedupe only the first N candidates (default 3)', '3')
+  .action(async (pathArg: string | undefined, opts: HuntCommandOptions) => {
+    const { auditPlaywrightDirectory, renderHuntReport, findDuplicates, renderDedupeReport } = await import('../src/hunt/index.js');
+    if (!opts.json) logger.banner();
+    const root = path.resolve(process.cwd(), pathArg || '.');
+    const severity = (opts.minSeverity || 'low') as 'low' | 'medium' | 'high';
+    if (!['low', 'medium', 'high'].includes(severity)) {
+      logger.error('--min-severity must be low, medium or high');
+      process.exit(1);
+    }
+    let audit;
+    try {
+      audit = await auditPlaywrightDirectory(root, { minSeverity: severity });
+    } catch (error) {
+      logger.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+    const gates: Array<Record<string, unknown>> = [];
+    const limit = Math.max(1, Math.min(20, Number(opts.limit) || 3));
+    if (opts.repo && opts.dedupe !== false) {
+      for (const candidate of audit.candidates.slice(0, limit)) {
+        const body = `${candidate.detail}\nRule: ${candidate.rule}\nFile: ${candidate.file}:${candidate.line}\nEvidence: ${candidate.evidence}`;
+        const gate = await findDuplicates(opts.repo, candidate.title, body);
+        gates.push({ candidate, gate });
+      }
+    }
+    if (opts.json) {
+      process.stdout.write(JSON.stringify({ audit, gates }, null, 2) + '\n');
+      return;
+    }
+    process.stdout.write(renderHuntReport(audit) + '\n');
+    if (gates.length) {
+      logger.info('Duplicate gates:');
+      for (const entry of gates) {
+        const gate = entry.gate as { decision: string; matches: Array<{ issue: { html_url: string; title: string } }> };
+        const candidate = entry.candidate as { title: string };
+        process.stdout.write(`\n## ${candidate.title}\n\n${renderDedupeReport(entry.gate as never)}\n`);
+      }
+      logger.info('Nothing was filed. Reproduce a candidate, read the gate, then write a minimal PR.');
+    }
+  });
+
+// ==========================================
+// COMMAND: DEDUPE (pre-filing duplicate gate)
+// ==========================================
+program
+  .command('dedupe')
+  .description('Check a QA bug candidate against a GitHub repo\'s issues and pull requests before filing')
+  .requiredOption('--repo <owner/name>', 'GitHub repository')
+  .requiredOption('--title <title>', 'Candidate title')
+  .option('--body <body>', 'Candidate body/evidence', '')
+  .option('--repro <file>', 'Verification artifact proving the bug fails on the current commit')
+  .option('--fix <file>', 'Verification artifact proving the fix succeeds')
+  .option('--json', 'Print the gate as JSON')
+  .action(async (opts: { repo: string; title: string; body?: string; json?: boolean; repro?: string; fix?: string }) => {
+    const { findDuplicates, renderDedupeReport, readVerificationEvidence, canFilePr } = await import('../src/hunt/index.js');
+    if (!opts.json) logger.banner();
+    const result = await findDuplicates(opts.repo, opts.title, opts.body || '');
+    let readiness = { ready: false, reasons: ['no verification artifacts supplied'] as string[] };
+    try {
+      const repro = opts.repro ? readVerificationEvidence(path.resolve(process.cwd(), opts.repro)) : undefined;
+      const fix = opts.fix ? readVerificationEvidence(path.resolve(process.cwd(), opts.fix)) : undefined;
+      readiness = canFilePr({ dedupe: result.decision, repro, fix });
+    } catch (error) {
+      readiness = { ready: false, reasons: [error instanceof Error ? error.message : String(error)] };
+    }
+    const enriched = { ...result, prReady: readiness.ready, prBlockers: readiness.reasons };
+    if (opts.json) {
+      process.stdout.write(JSON.stringify(enriched, null, 2) + '\n');
+    } else {
+      process.stdout.write(renderDedupeReport(result) + '\n');
+      logger.info(`PR-ready: ${readiness.ready ? 'yes' : 'no'}`);
+      for (const reason of readiness.reasons) logger.info(`- ${reason}`);
+    }
+    if (result.decision === 'BLOCK' || !readiness.ready) process.exitCode = 1;
+  });
+
+// ==========================================
+// COMMAND: VERIFY (reproduce/fix runner)
+// ==========================================
+interface VerifyCommandOptions {
+  cwd?: string;
+  command: string;
+  expect?: string;
+  timeout?: string;
+  json?: boolean;
+}
+
+program
+  .command('verify')
+  .description('Run an explicit command in a repo and write verification evidence (use --expect failure for a repro, success for a fix)')
+  .requiredOption('--command <command>', 'Exact command to run (executed with the shell in --cwd)')
+  .option('--cwd <dir>', 'Repository directory', '.')
+  .option('--expect <status>', 'success or failure', 'success')
+  .option('--timeout <ms>', 'Timeout in milliseconds', '120000')
+  .option('--json', 'Print the evidence as JSON')
+  .action(async (opts: VerifyCommandOptions) => {
+    const { runVerification } = await import('../src/hunt/index.js');
+    if (!opts.json) logger.banner();
+    const expect = opts.expect === 'failure' ? 'failure' : 'success';
+    try {
+      const evidence = await runVerification({
+        cwd: path.resolve(process.cwd(), opts.cwd || '.'),
+        command: opts.command,
+        expect,
+        timeoutMs: Number(opts.timeout) || 120000,
+      });
+      if (opts.json) {
+        process.stdout.write(JSON.stringify(evidence, null, 2) + '\n');
+      } else {
+        logger.info(`Command: ${evidence.command}`);
+        logger.info(`Commit: ${evidence.commit || '(not a git repo)'}${evidence.dirty ? ' (dirty)' : ''}`);
+        logger.info(`Exit: ${evidence.exitCode}${evidence.timedOut ? ' (timed out)' : ''} · ${evidence.durationMs} ms · expected ${evidence.expect}`);
+        logger.info(`Evidence: ${evidence.artifactPath}`);
+        if (!evidence.ok) {
+          logger.error('Verification did not meet the expected outcome.');
+          if (evidence.stderrTail) logger.info(evidence.stderrTail);
+        }
+      }
+      if (!evidence.ok) process.exitCode = 1;
+    } catch (error) {
+      logger.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  });
+
 program.parse(process.argv);

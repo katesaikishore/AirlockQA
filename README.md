@@ -101,6 +101,18 @@ bun bin/qafind.ts flake .qafind/reports --markdown
 
 `attach` writes a reporter into the project without touching your specs; the reporter writes one QAFind manifest per run. `flake` aggregates those manifests, classifies likely causes, and can include request-ledger evidence. See [docs/attach-and-flake.md](docs/attach-and-flake.md).
 
+## QA hunt
+
+Audit the test suite a project already has, then check the tracker before filing anything:
+
+```bash
+qafind hunt . --repo owner/repo --json
+qafind dedupe --repo owner/repo --title "Unawaited Playwright expectation"
+qafind verify --command "npx playwright test failing.spec.ts" --expect failure
+```
+
+`hunt` reports unawaited Playwright matchers, assertion-free tests, fixed waits, focused tests and tracked skips. It now ignores Vitest, Jest, Testing Library and `node:test` files so it does not emit framework-mismatched false positives. `dedupe` checks issues and pull requests before a report is filed. `verify` records the failing-repro and fixed-success evidence.
+
 ## Verified Merge
 
 Run the Playwright specs a pull request affects, rerun failures, and block only reproduced regressions:

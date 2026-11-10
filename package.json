@@ -1,6 +1,6 @@
 {
   "name": "qafind",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "TypeScript browser testing tools with configurable request policies and signed run evidence",
   "type": "module",
   "main": "dist/src/index.js",
@@ -49,7 +49,8 @@
     "js-yaml": "^5.5.0",
     "picocolors": "^1.1.1",
     "playwright-core": "^1.65.0",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "@babel/parser": "^8.1.0"
   },
   "peerDependencies": {
     "@playwright/test": "^1.65.0"
