@@ -182,6 +182,40 @@ export function printRunDetail(run: RunDetail): void {
   }
 }
 
+/** Start the one-URL automatic cloud pipeline and optionally watch it. */
+export async function appCommand(
+  url: string,
+  options: { apiKey?: string; apiUrl?: string; watch?: boolean; json?: boolean } = {},
+): Promise<void> {
+  const auth = requireAuth({ apiKey: options.apiKey, apiUrl: options.apiUrl });
+  checkUrlSyntax(url);
+  const base = auth.apiUrl.replace(/\/+$/, '');
+  const headers = { authorization: `Bearer ${auth.apiKey}`, 'content-type': 'application/json' };
+  const created = await fetch(`${base}/v1/applications`, { method: 'POST', headers, body: JSON.stringify({ targetUrl: url }) });
+  const body = (await created.json().catch(() => ({}))) as { application?: Record<string, unknown>; message?: string };
+  if (!created.ok) throw new Error(body.message || `QAFind Cloud returned ${created.status}`);
+  const application = body.application ?? {};
+  const id = String(application.id ?? '');
+  if (options.json) out(JSON.stringify(application, null, 2));
+  else {
+    out(`Application  ${id}`);
+    out(`Target       ${url}`);
+    out(`Pipeline     ${String(application.pipelineStatus ?? 'QUEUED')}`);
+  }
+  if (!options.watch) return;
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    const response = await fetch(`${base}/v1/applications/${encodeURIComponent(id)}`, { headers: { authorization: `Bearer ${auth.apiKey}` } });
+    const detail = (await response.json().catch(() => ({}))) as { application?: Record<string, unknown>; message?: string };
+    if (!response.ok) throw new Error(detail.message || `QAFind Cloud returned ${response.status}`);
+    const app = detail.application ?? {};
+    const status = String(app.pipelineStatus ?? 'UNKNOWN');
+    if (options.json) out(JSON.stringify(app));
+    else out(`Pipeline     ${status}${app.pipelineError ? ` — ${String(app.pipelineError)}` : ''}`);
+    if (status === 'COMPLETE' || status === 'FAILED') return;
+  }
+}
+
 export async function runsCommand(
   runId: string | undefined,
   options: { limit?: string; status?: string; json?: boolean; apiUrl?: string } = {}

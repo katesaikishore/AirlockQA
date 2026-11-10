@@ -1508,4 +1508,16 @@ program
     }
   });
 
+program
+  .command('app [url]')
+  .description('Start the QAFind Cloud one-URL QA pipeline: discovery, feature inventory, generated tests, security and labs')
+  .option('--key <key>', 'QAFind Cloud API key (default: saved key or QAFIND_API_KEY)')
+  .option('--api-url <url>', 'QAFind Cloud API base URL')
+  .option('--watch', 'Poll until the pipeline reaches COMPLETE or FAILED')
+  .option('--json', 'Print machine-readable output')
+  .action((url: string | undefined, opts: { key?: string; apiUrl?: string; watch?: boolean; json?: boolean }) => cloudAction(async () => {
+    if (!url) throw new Error('A target URL is required: qafind app https://example.com');
+    await (await import('../src/router/cloud-commands.js')).appCommand(url, opts);
+  })());
+
 program.parse(process.argv);

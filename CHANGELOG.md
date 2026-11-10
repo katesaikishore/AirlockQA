@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.0
+
+- `qafind app <url>` starts the QAFind Cloud one-URL QA pipeline and can watch it to completion.
+
 ## 2.2.0
 
 - Verified Merge accepts JUnit XML in addition to Playwright JSON.

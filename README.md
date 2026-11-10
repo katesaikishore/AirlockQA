@@ -101,6 +101,15 @@ bun bin/qafind.ts flake .qafind/reports --markdown
 
 `attach` writes a reporter into the project without touching your specs; the reporter writes one QAFind manifest per run. `flake` aggregates those manifests, classifies likely causes, and can include request-ledger evidence. See [docs/attach-and-flake.md](docs/attach-and-flake.md).
 
+## One-URL cloud pipeline
+
+```bash
+qafind app https://example.com --watch
+```
+
+Starts the QAFind Cloud pipeline: LLM + Playwright discovery, feature inventory, generated tests,
+cloud runs, signed evidence, security baseline and labs.
+
 ## QA hunt
 
 Audit the test suite a project already has, then check the tracker before filing anything:
