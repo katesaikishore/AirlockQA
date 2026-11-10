@@ -50,16 +50,16 @@ describe('Verified Merge triage', () => {
   test('signs the canonical verdict and includes an in-toto subject', () => {
     const first = parsePlaywrightReport(reportFile(false));
     const verdict = buildVerdict({ repo: 'owner/repo', headSha: 'a'.repeat(40), specs: ['cart.spec.ts'], selection: 'changed-tests', first, rerun: parsePlaywrightReport(reportFile(false)) });
-    const signed = signVerdict(verdict, { signingKey: 'test-signing-key-at-least-32-chars-long' });
+    const signed = signVerdict(verdict, { signingKey: 'test-signing-key-at-least-32-chars-long', env: {} });
     expect(signed.signature.algorithm).toBe('HMAC-SHA256');
     expect(verifyHmac(canonicalJson(verdict), signed.signature.signature, 'test-signing-key-at-least-32-chars-long')).toBe(true);
     expect(verdict.blockMerge).toBe(true);
     expect(buildInTotoStatement(verdict).subject).toEqual([{ name: 'owner/repo', digest: { sha1: 'a'.repeat(40) } }]);
-    expect(verifySignedVerdict(signed, { signingKey: 'test-signing-key-at-least-32-chars-long' }).valid).toBe(true);
-    expect(verifySignedVerdict(signed, { signingKey: 'wrong-signing-key-at-least-32-chars' }).valid).toBe(false);
+    expect(verifySignedVerdict(signed, { signingKey: 'test-signing-key-at-least-32-chars-long', env: {} }).valid).toBe(true);
+    expect(verifySignedVerdict(signed, { signingKey: 'wrong-signing-key-at-least-32-chars', env: {} }).valid).toBe(false);
     const tampered = JSON.parse(JSON.stringify(signed));
     tampered.payload.summary.regressions = 0;
-    expect(verifySignedVerdict(tampered, { signingKey: 'test-signing-key-at-least-32-chars-long' }).valid).toBe(false);
+    expect(verifySignedVerdict(tampered, { signingKey: 'test-signing-key-at-least-32-chars-long', env: {} }).valid).toBe(false);
   });
 });
 
