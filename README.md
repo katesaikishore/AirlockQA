@@ -7,6 +7,25 @@ AirlockQA is a local-first command-line tool for browser testing. It records a b
 
 It runs on your machine or in CI. The optional hosted service, Airlock Cloud at [qbrin.cloud](https://qbrin.cloud), runs workflows for you and is operated separately; its server code is not part of this repository.
 
+## Install
+
+From the GitHub release (works without the npm registry):
+
+```bash
+npm install -g https://github.com/katesaikishore/AirlockQA/releases/download/v1.2.0/airlockqa-1.2.0.tgz
+airlock --help
+airlock verify-merge --help
+```
+
+Or run from a checkout:
+
+```bash
+git clone https://github.com/katesaikishore/AirlockQA.git
+cd AirlockQA && bun install && bun bin/airlock.ts --help
+```
+
+The package is published to npm as `airlockqa` once the release token is available.
+
 ## Status at a glance
 
 Read this table before relying on a feature. Each row describes what this repository implements today.
