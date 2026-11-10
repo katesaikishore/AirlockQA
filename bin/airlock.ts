@@ -1178,4 +1178,15 @@ program
 
 // ==========================================
 
+// ==========================================
+// COMMAND: MCP
+// ==========================================
+program
+  .command('mcp')
+  .description('Run the AirlockQA MCP server over stdio (evidence verification and flake triage)')
+  .action(async () => {
+    const { startMcpServer } = await import('../src/mcp/server.js');
+    startMcpServer();
+  });
+
 program.parse(process.argv);

@@ -46,6 +46,14 @@ bun bin/airlock.ts flake .airlock/reports --markdown
 
 `attach` writes a reporter into the project without touching your specs; the reporter writes one Airlock manifest per run. `flake` aggregates those manifests, classifies likely causes, and can include request-ledger evidence. See [docs/attach-and-flake.md](docs/attach-and-flake.md).
 
+## MCP
+
+```bash
+bun bin/airlock.ts mcp
+```
+
+The public MCP server exposes `airlock_evidence_verify` and `airlock_flake` over stdio. See [docs/mcp.md](docs/mcp.md).
+
 ## How it works
 
 1. **Explore** a page to record a trace, or write a spec by hand.
