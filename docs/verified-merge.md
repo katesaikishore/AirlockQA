@@ -47,6 +47,19 @@ qafind verify-merge \
 Required environment for upload: `QAFIND_API_KEY`. Signing requires `QAFIND_SIGNING_KEY`
 (HMAC secret or Ed25519 PEM). The command exits `1` only when a **reproduced regression** is present.
 
+## Result formats
+
+`--results` and `--rerun-results` accept:
+
+- **Playwright JSON** (`.json`)
+- **JUnit XML** (`.xml`, or XML detected by content)
+
+JUnit XML is the bridge for Cypress, Selenium, WebdriverIO and most CI runners. The triage is identical:
+a test that failed in the first report and passes in the rerun is a flake; one that fails again is a
+reproduced regression. No framework-specific special cases.
+
+Detection is automatic; there is no `--format` flag to get wrong.
+
 ## What counts
 
 | Result | Meaning | Blocks merge? |

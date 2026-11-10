@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.0
+
+- Verified Merge accepts JUnit XML in addition to Playwright JSON.
+- One triage path for Playwright, Cypress, Selenium, WebdriverIO and CI runners that export JUnit.
+
 ## 2.1.0
 
 - `qafind hunt`: audit an existing Playwright suite for unawaited assertions, assertion-free tests, fixed waits, focused tests and tracked skips.

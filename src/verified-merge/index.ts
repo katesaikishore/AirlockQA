@@ -7,6 +7,8 @@
  */
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import { isJUnitReport, parseJUnitReport } from './junit.js';
+export { isJUnitReport, parseJUnitReport } from './junit.js';
 import * as path from 'node:path';
 import { diffFromGit, isSourceFile, isTestFile, parseUnifiedDiff } from './diff.js';
 import { resolveSigningKey, type SigningAlgorithm } from '../compliance/attestation.js';
@@ -330,8 +332,8 @@ export function buildInTotoStatement(verdict: VerifiedMergeVerdict): InTotoState
 
 export function loadReportIfExists(file: string | null | undefined): PlaywrightRun | null {
   if (!file) return null;
-  if (!fs.existsSync(file)) throw new Error(`Playwright report not found: ${file}`);
-  return parsePlaywrightReport(file);
+  if (!fs.existsSync(file)) throw new Error(`Test report not found: ${file}`);
+  return isJUnitReport(file) ? parseJUnitReport(file) : parsePlaywrightReport(file);
 }
 
 

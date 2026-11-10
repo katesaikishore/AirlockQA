@@ -121,7 +121,7 @@ Run the Playwright specs a pull request affects, rerun failures, and block only 
 QAFIND_SIGNING_KEY=... bun bin/qafind.ts verify-merge --run --base origin/main --head HEAD --repo owner/repo --pr "$PR_NUMBER"
 ```
 
-The signed verdict and in-toto/DSSE attestation can be verified offline with `qafind verify-intoto`. See [docs/verified-merge.md](docs/verified-merge.md).
+Results can be Playwright JSON or JUnit XML from Cypress, Selenium, WebdriverIO or another runner. The signed verdict and in-toto/DSSE attestation can be verified offline with `qafind verify-intoto`. See [docs/verified-merge.md](docs/verified-merge.md).
 
 ## MCP
 
