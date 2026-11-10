@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in QAFind is not working as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Thanks for reporting. Do not include secrets, customer data, or private repository content."
+  - type: input
+    id: version
+    attributes:
+      label: QAFind version
+      description: Output of `qafind --version`
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - attach
+        - flake
+        - verify-merge
+        - MCP
+        - GitHub Action
+        - Cloud API / console
+        - documentation
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Run ...\n2. See ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Logs, screenshot, recording, or a signed verdict. Redact secrets and private repo names.

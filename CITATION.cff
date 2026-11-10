@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: If you use QAFind in research or a published benchmark, cite this repository.
+title: QAFind
+abstract: Run the Playwright specs a pull request affects, rerun failures, block only reproduced regressions, and emit signed evidence.
+type: software
+license: MIT
+repository-code: https://github.com/katesaikishore/QAFind
+url: https://qafind.si
+keywords:
+  - playwright
+  - testing
+  - flaky-tests
+  - verified-merge
+  - in-toto
+authors:
+  - name: QAFind

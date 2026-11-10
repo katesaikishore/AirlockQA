@@ -55,6 +55,13 @@ jobs:
 All inputs are described in [docs/github-action.md](docs/github-action.md).
 
 
+## Open source
+
+QAFind is MIT-licensed and built in public. Read [CONTRIBUTING.md](CONTRIBUTING.md), the [contributor path](docs/CONTRIBUTOR-PATH.md), and the [roadmap](docs/ROADMAP.md).
+
+Maintainers of open-source projects using Playwright can apply to the [open-source program](docs/open-source-program.md): Verified Merge in comment-only mode, free, with no public mention without approval.
+
+If QAFind helped your project, open a **Showcase** issue with the repository and what it caught. No marketing copy needed — the evidence is the point.
 ## Status at a glance
 
 Read this table before relying on a feature. Each row describes what this repository implements today.

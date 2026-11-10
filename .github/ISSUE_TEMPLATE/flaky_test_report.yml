@@ -1,0 +1,37 @@
+name: Flaky test report
+description: Share a flake QAFind found, or a false classification.
+labels: [flake-triage]
+body:
+  - type: markdown
+    attributes:
+      value: "A flake report is most useful when it includes the reporter manifest and the rerun evidence. Do not include secrets or private code."
+  - type: input
+    id: version
+    attributes:
+      label: QAFind version
+      description: Output of `qafind --version`
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      placeholder: "qafind flake .airlock/reports --json"
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Classification
+      description: Did QAFind report flake, regression, or something else? Include the evidence tier.
+    validations:
+      required: true
+  - type: textarea
+    id: rerun
+    attributes:
+      label: Rerun behaviour
+      description: What happened when the failed spec was rerun?
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should QAFind have said?
