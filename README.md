@@ -46,13 +46,23 @@ bun bin/airlock.ts flake .airlock/reports --markdown
 
 `attach` writes a reporter into the project without touching your specs; the reporter writes one Airlock manifest per run. `flake` aggregates those manifests, classifies likely causes, and can include request-ledger evidence. See [docs/attach-and-flake.md](docs/attach-and-flake.md).
 
+## Verified Merge
+
+Run the Playwright specs a pull request affects, rerun failures, and block only reproduced regressions:
+
+```bash
+AIRLOCK_SIGNING_KEY=... bun bin/airlock.ts verify-merge --run --base origin/main --head HEAD --repo owner/repo --pr "$PR_NUMBER"
+```
+
+The signed verdict and in-toto/DSSE attestation can be verified offline with `airlock verify-intoto`. See [docs/verified-merge.md](docs/verified-merge.md).
+
 ## MCP
 
 ```bash
 bun bin/airlock.ts mcp
 ```
 
-The public MCP server exposes `airlock_evidence_verify` and `airlock_flake` over stdio. See [docs/mcp.md](docs/mcp.md).
+The public MCP server exposes `airlock_evidence_verify`, `airlock_verify` and `airlock_flake` over stdio. See [docs/mcp.md](docs/mcp.md).
 
 ## How it works
 

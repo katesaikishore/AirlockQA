@@ -14,6 +14,7 @@ import * as readline from 'node:readline';
 import { AttestationEngine } from '../compliance/attestation.js';
 import { analyzeFlakiness, renderFlakeMarkdown } from '../flake/index.js';
 import { readRunReports } from '../testing/airlock-report.js';
+import { verifySignedVerdict } from '../verified-merge/index.js';
 import type { ComplianceProofBundle } from '../types/index.js';
 
 export const PROTOCOL_VERSION = '2025-06-18';
@@ -28,6 +29,11 @@ export const TOOLS: ToolDefinition[] = [
     name: 'airlock_evidence_verify',
     description: 'Verify a signed Airlock run-evidence bundle (Merkle root, hash chain, signature). Set AIRLOCK_SIGNING_KEY for HMAC bundles or AIRLOCK_TRUSTED_PUBLIC_KEY to pin Ed25519.',
     inputSchema: { type: 'object', properties: { bundlePath: { type: 'string', description: 'Path to an attestation-*.json bundle.' } }, required: ['bundlePath'] },
+  },
+  {
+    name: 'airlock_verify',
+    description: 'Verify a signed Airlock Verified Merge verdict offline: payload hash, signature and whether a reproduced regression blocks the merge.',
+    inputSchema: { type: 'object', properties: { verdictPath: { type: 'string', description: 'Path to the signed verified-merge verdict JSON.' }, publicKeyPem: { type: 'string', description: 'Ed25519 public key PEM. HMAC verdicts use AIRLOCK_SIGNING_KEY.' } }, required: ['verdictPath'] },
   },
   {
     name: 'airlock_flake',
@@ -56,6 +62,14 @@ function callTool(name: string, args: Record<string, unknown>) {
     const key = process.env.AIRLOCK_SIGNING_KEY?.trim() || undefined;
     const result = AttestationEngine.verifyBundle(bundle, { key, trustedPublicKey });
     return textResult({ valid: result.valid, reason: result.reason, runId: bundle.runId, merkleRoot: bundle.merkleRoot, signingAlgorithm: bundle.signingAlgorithm, insecureDevKey: bundle.insecureDevKey === true, warnings: result.warnings });
+  }
+  if (name === 'airlock_verify') {
+    const verdictPath = safePath(String(args.verdictPath || ''));
+    if (!fs.existsSync(verdictPath)) throw new Error(`verdict not found: ${verdictPath}`);
+    const verdict = JSON.parse(fs.readFileSync(verdictPath, 'utf8'));
+    const publicKeyPem = typeof args.publicKeyPem === 'string' && args.publicKeyPem.trim() ? args.publicKeyPem.trim() : undefined;
+    const result = verifySignedVerdict(verdict, { publicKeyPem });
+    return textResult({ valid: result.valid, reason: result.reason, blockMerge: result.blockMerge, summary: result.summary });
   }
   if (name === 'airlock_flake') {
     const target = args.reportsPath ? safePath(String(args.reportsPath)) : path.resolve(process.cwd(), '.airlock/reports');

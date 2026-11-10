@@ -1189,4 +1189,170 @@ program
     startMcpServer();
   });
 
+// ==========================================
+// COMMAND: VERIFY-MERGE (Verified Merge triage)
+function gitRef(cwd: string, args: string[]): string | null {
+  try { return String(require('node:child_process').execFileSync('git', args, { cwd, encoding: 'utf8' }) || '').trim() || null; } catch { return null; }
+}
+// ==========================================
+interface VerifyMergeCommandOptions {
+  base: string;
+  head: string;
+  results?: string;
+  rerunResults?: string;
+  run?: boolean;
+  specs?: string;
+  command?: string;
+  rerunCommand?: string;
+  timeout?: string;
+  repo?: string;
+  pr?: string;
+  out?: string;
+  intoto?: string;
+  json?: boolean;
+  markdown?: boolean;
+  upload?: boolean;
+  apiUrl?: string;
+  token?: string;
+  signingKey?: string;
+}
+
+program
+  .command('verify-merge')
+  .description('Triage the Playwright specs a PR affects, report only reproduced regressions, sign the verdict and optionally upload it to Airlock Cloud')
+  .option('--base <ref>', 'Base git ref', 'origin/main')
+  .option('--head <ref>', 'Head git ref', 'HEAD')
+  .option('--run', 'Run the affected Playwright specs from this CLI (instead of --results)')
+  .option('--specs <list>', 'Comma-separated spec files to use as the explicit affected set')
+  .option('--command <template>', 'Run command with {specs}; default: npx playwright test {specs} --reporter=json')
+  .option('--rerun-command <template>', 'Command for the deterministic rerun (defaults to --command)')
+  .option('--timeout <ms>', 'Timeout for each Playwright run', '900000')
+  .option('--results <file>', 'Playwright JSON report from the first run (when not using --run)')
+  .option('--rerun-results <file>', 'Playwright JSON report from the deterministic rerun of the same specs')
+  .option('--repo <owner/name>', 'Repository slug')
+  .option('--pr <number>', 'Pull request number')
+  .option('--out <file>', 'Write the signed verdict JSON', '.airlock/verified-merge/verdict.json')
+  .option('--intoto <file>', 'Write an in-toto test-result statement')
+  .option('--json', 'Print the signed verdict JSON to stdout')
+  .option('--markdown', 'Print the PR-comment Markdown to stdout')
+  .option('--upload', 'Upload the signed verdict to Airlock Cloud')
+  .option('--api-url <url>', 'Airlock Cloud API URL (default: AIRLOCK_CLOUD_URL or https://api.qbrin.cloud)')
+  .option('--token <token>', 'API key (default: AIRLOCK_API_KEY)')
+  .option('--signing-key <key>', 'Signing key (default: AIRLOCK_SIGNING_KEY)')
+  .action(async (opts: VerifyMergeCommandOptions) => {
+    if (opts.json) {
+      const toStderr = (...args: unknown[]) => console.error(...args);
+      console.log = toStderr;
+    }
+    if (!opts.json) logger.banner();
+    if (!opts.results && !opts.run) {
+      logger.error('Pass --results <playwright.json> (and optionally --rerun-results), or use --run to execute the specs.');
+      process.exit(1);
+    }
+    const { affectedSpecs, buildVerdict, buildInTotoStatement, loadReportIfExists, parsePlaywrightReport, renderVerdictMarkdown, signVerdict } = await import('../src/verified-merge/index.js');
+    const { signInTotoStatement } = await import('../src/compliance/intoto.js');
+    const { failedSpecFiles, runPlaywright } = await import('../src/verified-merge/run.js');
+    const { ensureDir, writeJsonFile } = await import('../src/utils/files.js');
+    const cwd = process.cwd();
+    try {
+      const explicitSpecs = opts.specs ? opts.specs.split(',').map((spec) => spec.trim()).filter(Boolean) : [];
+      const selection = explicitSpecs.length ? { specs: explicitSpecs, selection: 'explicit' as const, files: [] } : affectedSpecs(cwd, opts.base, opts.head);
+      let first;
+      let rerun = null;
+      if (opts.run) {
+        if (!selection.specs.length) throw new Error('No affected specs were selected; pass --results or check the git diff');
+        const timeout = Number(opts.timeout) || 900_000;
+        const firstRun = await runPlaywright({ cwd, specs: selection.specs, command: opts.command, timeoutMs: timeout, label: 'affected specs' });
+        if (!opts.json) logger.info(`Playwright first run exited ${firstRun.exitCode} in ${firstRun.durationMs}ms`);
+        first = parsePlaywrightReport(firstRun.reportPath);
+        const reportFiles = failedSpecFiles(first);
+        // Playwright reports paths relative to testDir; map them back to the paths supplied to this run.
+        const failedFiles = reportFiles.map((file) => selection.specs.find((spec) => spec === file || spec.endsWith('/' + file) || path.basename(spec) === path.basename(file)) || file);
+        if (failedFiles.length) {
+          const rerunRun = await runPlaywright({ cwd, specs: failedFiles, command: opts.rerunCommand || opts.command, timeoutMs: timeout, label: 'failed specs rerun' });
+          if (!opts.json) logger.info(`Playwright rerun exited ${rerunRun.exitCode} in ${rerunRun.durationMs}ms`);
+          rerun = parsePlaywrightReport(rerunRun.reportPath);
+        }
+      } else {
+        first = loadReportIfExists(opts.results)!;
+        rerun = loadReportIfExists(opts.rerunResults);
+      }
+      const verdict = buildVerdict({
+        repo: opts.repo ?? null,
+        prNumber: opts.pr ? Number(opts.pr) : null,
+        baseSha: process.env.GITHUB_BASE_SHA || gitRef(cwd, ['rev-parse', opts.base]),
+        headSha: process.env.GITHUB_SHA || gitRef(cwd, ['rev-parse', opts.head]),
+        specs: selection.specs,
+        selection: selection.selection,
+        first,
+        rerun,
+      });
+      const signed = signVerdict(verdict, { signingKey: opts.signingKey });
+      const outFile = path.resolve(cwd, opts.out || '.airlock/verified-merge/verdict.json');
+      ensureDir(path.dirname(outFile));
+      writeJsonFile(outFile, signed);
+      if (opts.intoto) {
+        const intotoFile = path.resolve(cwd, opts.intoto);
+        ensureDir(path.dirname(intotoFile));
+        writeJsonFile(intotoFile, signInTotoStatement(buildInTotoStatement(verdict), { signingKey: opts.signingKey }));
+      }
+      if (opts.upload) {
+        const apiUrl = (opts.apiUrl || process.env.AIRLOCK_CLOUD_URL || 'https://api.qbrin.cloud').replace(/\/+$/, '');
+        const token = opts.token || process.env.AIRLOCK_API_KEY || '';
+        if (!token) throw new Error('--upload needs --token or AIRLOCK_API_KEY');
+        const response = await fetch(`${apiUrl}/v1/verified-merge/reports`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ repo: verdict.repo, prNumber: verdict.prNumber, headSha: verdict.headSha || '', baseSha: verdict.baseSha, verdict, bundle: signed }),
+        });
+        if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
+        const uploaded = (await response.json()) as { report?: { id?: string } };
+        logger.success(`Uploaded Verified Merge report ${uploaded.report?.id || ''}`);
+      }
+      if (opts.json) process.stdout.write(JSON.stringify(signed, null, 2) + '\n');
+      else if (opts.markdown) process.stdout.write(renderVerdictMarkdown(verdict));
+      else {
+        logger.info(`Affected specs: ${verdict.affectedSpecs.length} (${verdict.selection})`);
+        logger.info(`Tests: ${verdict.summary.tests} · regressions: ${verdict.summary.regressions} · flakes: ${verdict.summary.flakes} · not rerun: ${verdict.summary.notRerun}`);
+        logger.info(`Signed verdict: ${outFile}`);
+        if (verdict.blockMerge) logger.error('Reproduced regression: merge blocked');
+        else logger.success('No reproduced regressions');
+      }
+      if (verdict.blockMerge) process.exitCode = 1;
+    } catch (error) {
+      logger.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  });
+
+// ==========================================
+// COMMAND: VERIFY-INTOTO (offline DSSE verification)
+// ==========================================
+interface VerifyIntotoCommandOptions {
+  signingKey?: string;
+  publicKey?: string;
+  json?: boolean;
+}
+
+program
+  .command('verify-intoto <file>')
+  .description('Verify a signed in-toto/DSSE test-result attestation offline')
+  .option('--signing-key <key>', 'HMAC key (default: AIRLOCK_SIGNING_KEY)')
+  .option('--public-key <pem>', 'Ed25519 public key PEM')
+  .option('--json', 'Print the verification result as JSON')
+  .action(async (file: string, opts: VerifyIntotoCommandOptions) => {
+    const { verifyInTotoEnvelope } = await import('../src/compliance/intoto.js');
+    const target = path.resolve(process.cwd(), file);
+    if (!fs.existsSync(target)) { logger.error(`Attestation not found: ${target}`); process.exit(1); }
+    let envelope: unknown;
+    try { envelope = JSON.parse(fs.readFileSync(target, 'utf8')); } catch (error) { logger.error(`Cannot read attestation: ${(error as Error).message}`); process.exit(1); }
+    const result = verifyInTotoEnvelope(envelope, { signingKey: opts.signingKey, publicKeyPem: opts.publicKey });
+    if (opts.json) process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    else if (result.valid) {
+      logger.success(`Valid in-toto attestation (${result.algorithm}, ${result.keyid})`);
+      logger.info(`Result: ${String((result.statement?.predicate as any)?.result ?? 'unknown')}`);
+    } else logger.error(`Verification failed: ${result.reason}`);
+    if (!result.valid) process.exitCode = 1;
+  });
+
 program.parse(process.argv);

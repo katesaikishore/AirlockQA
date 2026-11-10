@@ -1,0 +1,38 @@
+# Copy into .github/workflows/verified-merge.yml in a customer repository.
+# The customer's CI runs the specs; Airlock stores the signed verdict and posts the required check/comment.
+name: Airlock Verified Merge
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  verified-merge:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install project and Playwright
+        run: |
+          bun install --frozen-lockfile
+          bunx playwright install --with-deps chromium
+
+      - name: Verify affected specs
+        run: bun bin/airlock.ts verify-merge --run --upload
+        env:
+          AIRLOCK_API_KEY: ${{ secrets.AIRLOCK_API_KEY }}
+          AIRLOCK_SIGNING_KEY: ${{ secrets.AIRLOCK_SIGNING_KEY }}
+          AIRLOCK_CLOUD_URL: https://api.qbrin.cloud
+          # The CLI falls back to git HEAD when these are absent; explicit PR SHAs make the report exact.
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
