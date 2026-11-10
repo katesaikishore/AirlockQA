@@ -9,12 +9,18 @@ It runs on your machine or in CI. The optional hosted service, Airlock Cloud at 
 
 ## Install
 
-From the GitHub release (works without the npm registry):
+From npm:
+
+```bash
+npm install -g airlockqa@1.2.1
+airlock --help
+airlock verify-merge --help
+```
+
+Or from the GitHub release:
 
 ```bash
 npm install -g https://github.com/katesaikishore/AirlockQA/releases/download/v1.2.0/airlockqa-1.2.0.tgz
-airlock --help
-airlock verify-merge --help
 ```
 
 Or run from a checkout:
@@ -24,7 +30,6 @@ git clone https://github.com/katesaikishore/AirlockQA.git
 cd AirlockQA && bun install && bun bin/airlock.ts --help
 ```
 
-The package is published to npm as `airlockqa` once the release token is available.
 
 ## Status at a glance
 
