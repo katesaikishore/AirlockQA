@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "tool": "airlock-reporter",
+  "runId": "run-20261109T050419Z-90a68f",
+  "startedAt": "2026-11-09T05:04:19.294Z",
+  "finishedAt": "2026-11-09T05:04:23.326Z",
+  "durationMs": 4167,
+  "cwd": "/Users/katesaikishore/airlock-cloud/examples/attach-demo",
+  "tests": [
+    {
+      "id": "default::checks.spec.ts::checks.spec.ts › cart fixture returns totals",
+      "title": "cart fixture returns totals",
+      "titlePath": [
+        "checks.spec.ts",
+        "cart fixture returns totals"
+      ],
+      "file": "checks.spec.ts",
+      "project": "default",
+      "status": "passed",
+      "retries": 0,
+      "durationMs": 179,
+      "errors": [],
+      "attachments": [
+        {
+          "name": "airlock-request-ledger",
+          "contentType": "application/json"
+        }
+      ]
+    },
+    {
+      "id": "default::checks.spec.ts::checks.spec.ts › login selector exists",
+      "title": "login selector exists",
+      "titlePath": [
+        "checks.spec.ts",
+        "login selector exists"
+      ],
+      "file": "checks.spec.ts",
+      "project": "default",
+      "status": "failed",
+      "retries": 0,
+      "durationMs": 156,
+      "errors": [
+        "Error: locator.waitFor: Timeout 30000ms exceeded.\nwaiting for selector \"#login\""
+      ],
+      "attachments": [
+        {
+          "name": "airlock-request-ledger",
+          "contentType": "application/json"
+        },
+        {
+          "name": "error-context",
+          "path": "/Users/katesaikishore/airlock-cloud/examples/attach-demo/test-results/checks-login-selector-exists/error-context.md",
+          "contentType": "text/markdown"
+        }
+      ]
+    },
+    {
+      "id": "default::checks.spec.ts::checks.spec.ts › pricing copy is stable",
+      "title": "pricing copy is stable",
+      "titlePath": [
+        "checks.spec.ts",
+        "pricing copy is stable"
+      ],
+      "file": "checks.spec.ts",
+      "project": "default",
+      "status": "passed",
+      "retries": 0,
+      "durationMs": 185,
+      "errors": [],
+      "attachments": [
+        {
+          "name": "airlock-request-ledger",
+          "contentType": "application/json"
+        }
+      ]
+    },
+    {
+      "id": "default::checks.spec.ts::checks.spec.ts › slow recommendations endpoint",
+      "title": "slow recommendations endpoint",
+      "titlePath": [
+        "checks.spec.ts",
+        "slow recommendations endpoint"
+      ],
+      "file": "checks.spec.ts",
+      "project": "default",
+      "status": "passed",
+      "retries": 0,
+      "durationMs": 135,
+      "errors": [],
+      "attachments": [
+        {
+          "name": "airlock-request-ledger",
+          "contentType": "application/json"
+        }
+      ]
+    },
+    {
+      "id": "default::checks.spec.ts::checks.spec.ts › known checkout total mismatch",
+      "title": "known checkout total mismatch",
+      "titlePath": [
+        "checks.spec.ts",
+        "known checkout total mismatch"
+      ],
+      "file": "checks.spec.ts",
+      "project": "default",
+      "status": "failed",
+      "retries": 0,
+      "durationMs": 149,
+      "errors": [
+        "Error: expect(received).toBe(expected)\nExpected: 42\nReceived: 41"
+      ],
+      "attachments": [
+        {
+          "name": "airlock-request-ledger",
+          "contentType": "application/json"
+        },
+        {
+          "name": "error-context",
+          "path": "/Users/katesaikishore/airlock-cloud/examples/attach-demo/test-results/checks-known-checkout-total-mismatch/error-context.md",
+          "contentType": "text/markdown"
+        }
+      ]
+    },
+    {
+      "id": "default::determinism.spec.ts::determinism.spec.ts › fixed clock and recorded page document",
+      "title": "fixed clock and recorded page document",
+      "titlePath": [
+        "determinism.spec.ts",
+        "fixed clock and recorded page document"
+      ],
+      "file": "determinism.spec.ts",
+      "project": "default",
+      "status": "passed",
+      "retries": 0,
+      "durationMs": 233,
+      "errors": [],
+      "attachments": [
+        {
+          "name": "airlock-request-ledger",
+          "contentType": "application/json"
+        }
+      ]
+    }
+  ]
+}

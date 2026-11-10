@@ -1,38 +1,131 @@
-name: AirlockQA Attach + Flake
-description: Attach the AirlockQA reporter to an existing Playwright suite, run it, and publish a flake report.
+name: Airlock QA
+description: Run Airlock QA against a pull-request commit and upload a signed report with failure screenshots.
+author: AirlockQA
 branding:
   icon: shield
-  color: blue
+  color: green
+
 inputs:
-  project-dir:
-    description: Repository directory containing playwright.config.ts
+  api-key:
+    description: AIRLOCK_API_KEY for the Airlock Cloud workspace (store it as a repository secret).
+    required: true
+  suites:
+    description: Comma-separated Airlock QA suites.
     required: false
-    default: .
-  reports-path:
-    description: Airlock reporter output directory
+    default: smoke,explore
+  gate:
+    description: Gate mode passed to `airlock qa --gate`.
     required: false
-    default: .airlock/reports
-  fail-on-flake:
-    description: Fail the job when flaky tests are found
+    default: strict
+  report-dir:
+    description: Directory for the Markdown report and screenshots.
     required: false
-    default: "false"
+    default: qa-report
+  comment:
+    description: Comment the report on pull requests.
+    required: false
+    default: 'true'
+
+outputs:
+  run-id:
+    description: The Airlock QA run id, when the request was accepted.
+    value: ${{ steps.qa.outputs.run-id }}
+  report-path:
+    description: Directory containing report.md and screenshots.
+    value: ${{ inputs.report-dir }}
+
 runs:
   using: composite
   steps:
-    - name: Attach reporter
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: '1.3.14'
+
+    - name: Install the AirlockQA CLI
       shell: bash
-      run: npx --yes airlockqa@latest attach "${{ inputs.project-dir }}"
-    - name: Run Playwright
+      working-directory: ${{ github.action_path }}
+      run: bun install --frozen-lockfile
+
+    - name: Prepare the QA request
       shell: bash
-      run: npx playwright test
-    - name: Flake report
+      run: |
+        set -euo pipefail
+        mkdir -p "$RUNNER_TEMP/airlock-qa"
+        if [ -f "$GITHUB_WORKSPACE/airlock.config.json" ]; then
+          # Remove test:explore so the checker runs instead of the repository's own script.
+          # Keep every other suite and setting.
+          jq 'del(.qa.scripts["test:explore"])' "$GITHUB_WORKSPACE/airlock.config.json" \
+            > "$RUNNER_TEMP/airlock-qa/airlock.config.json"
+        else
+          printf '%s\n' '{"qa":{"healthPath":"/","scripts":{}}}' > "$RUNNER_TEMP/airlock-qa/airlock.config.json"
+        fi
+
+    - name: Run Airlock QA
+      id: qa
+      shell: bash
+      continue-on-error: true
+      env:
+        AIRLOCK_API_KEY: ${{ inputs.api-key }}
+        GH_TOKEN: ${{ github.token }}
+        QA_REPO: ${{ github.server_url }}/${{ github.repository }}
+        QA_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        QA_BRANCH: ${{ github.head_ref || github.ref_name }}
+        QA_SUITES: ${{ inputs.suites }}
+        QA_GATE: ${{ inputs.gate }}
+      run: |
+        set -euo pipefail
+        cd "$RUNNER_TEMP/airlock-qa"
+        bun "${{ github.action_path }}/bin/airlock.ts" qa \
+          --repo "$QA_REPO" --sha "$QA_SHA" --branch "$QA_BRANCH" \
+          --suites "$QA_SUITES" --gate "$QA_GATE" --wait --json > qa.json
+        ID=$(jq -r '.id // empty' qa.json)
+        if [ -n "$ID" ]; then
+          echo "run-id=$ID" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Write the report
+      if: always()
       shell: bash
       env:
-        REPORTS_PATH: ${{ inputs.reports-path }}
-        FAIL_ON_FLAKE: ${{ inputs.fail-on-flake }}
+        AIRLOCK_API_KEY: ${{ inputs.api-key }}
+        QA_REPORT_DIR: ${{ inputs.report-dir }}
       run: |
-        if [ "$FAIL_ON_FLAKE" = "true" ]; then
-          npx --yes airlockqa@latest flake "$REPORTS_PATH" --markdown --fail-on-flake
-        else
-          npx --yes airlockqa@latest flake "$REPORTS_PATH" --markdown
+        set -euo pipefail
+        cd "$RUNNER_TEMP/airlock-qa"
+        if [ -s qa.json ]; then
+          ID=$(jq -r '.id // empty' qa.json)
+          if [ -n "$ID" ]; then
+            bun "${{ github.action_path }}/bin/airlock.ts" qa report "$ID" --out "$QA_REPORT_DIR" || true
+          fi
+        fi
+
+    - name: Upload the report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: airlock-qa-report
+        path: ${{ runner.temp }}/airlock-qa/${{ inputs.report-dir }}
+        if-no-files-found: warn
+        retention-days: 14
+
+    - name: Comment on the pull request
+      if: always() && github.event_name == 'pull_request' && inputs.comment == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        QA_REPORT_DIR: ${{ inputs.report-dir }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        set -euo pipefail
+        REPORT="$RUNNER_TEMP/airlock-qa/$QA_REPORT_DIR/report.md"
+        if [ -f "$REPORT" ]; then
+          {
+            printf '%s\n' '<!-- airlock-qa -->'
+            printf '\n'
+            cat "$REPORT"
+            printf '\n'
+            printf '%s\n' '_Screenshots are attached to the Airlock QA artifact in this workflow._'
+          } > "$RUNNER_TEMP/airlock-qa/comment.md"
+          gh pr comment "$PR_NUMBER" --body-file "$RUNNER_TEMP/airlock-qa/comment.md"
         fi

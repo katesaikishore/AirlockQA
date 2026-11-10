@@ -18,7 +18,7 @@ test('public MCP server lists its two tools and runs flake on demo reports', asy
     expect(init.result.serverInfo.name).toBe('airlockqa');
     const list = await call('tools/list', {});
     expect(list.result.tools.map((tool: any) => tool.name)).toEqual(['airlock_evidence_verify', 'airlock_flake']);
-    const flake = await call('tools/call', { name: 'airlock_flake', arguments: { reportsPath: 'examples/attach-demo/.airlock/reports' } });
+    const flake = await call('tools/call', { name: 'airlock_flake', arguments: { reportsPath: 'tests/fixtures/airlock-reports' } });
     expect(JSON.parse(flake.result.content[0].text).flakyTests).toBeGreaterThan(0);
   } finally {
     child.kill('SIGTERM');
