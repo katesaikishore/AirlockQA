@@ -1,0 +1,12 @@
+{
+  "name": "airlock-attach-demo",
+  "private": true,
+  "type": "module",
+  "description": "Unmodified Playwright suite used to show airlock attach + airlock flake.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0"
+  }
+}

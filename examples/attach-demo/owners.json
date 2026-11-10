@@ -1,0 +1,4 @@
+{
+  "checks.spec.ts": "checkout-qa",
+  "default::checks.spec.ts::checks.spec.ts › cart fixture returns totals": "payments-qa"
+}

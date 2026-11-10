@@ -14,6 +14,8 @@ Read this table before relying on a feature. Each row describes what this reposi
 | Capability | Status | Notes |
 | :--- | :--- | :--- |
 | `explore`, `compile`, `init` | Implemented | Records clicks, typing, key presses and selects into a trace; compiles it to a Playwright spec. |
+| `attach` | Implemented | Adds the Airlock reporter to an existing Playwright suite without editing specs and writes run manifests under `.airlock/reports`. |
+| `flake` | Implemented | Aggregates reporter manifests, classifies probable causes, reads request ledgers, and emits terminal, JSON or Markdown reports plus quarantine recommendations. |
 | `test --local` | Implemented | Runs specs through Playwright Test. Hand-written specs can use the `airlockTest` fixture; compiled specs attach the gateway in `beforeEach`. |
 | `run` (configured workflow) | Implemented | Runs `workflow` steps in one browser, with the gateway attached, and writes signed evidence. |
 | Phantom credential substitution | Implemented | Exact string match in request headers and in text request bodies. Other bodies are passed through unchanged. |
@@ -31,6 +33,18 @@ Read this table before relying on a feature. Each row describes what this reposi
 | Browser fixtures (`fixture` workflow step) | Implemented, browser-only | Serves a same-origin, method-specific response in the page; no upstream request. No server-side fixture store. |
 | `sync` (encrypted local data) | Implemented | Uploads traces, checkpoints, healing logs, fixtures and capsules, encrypted on the client with `AIRLOCK_SYNC_KEY`. The server stores only ciphertext and metadata; 200 artifacts / 50 MB per workspace, 2 MB each. |
 | Airlock Cloud (`login`, `test --cloud`, `usage`, `runs`) | Implemented (hosted) | A hosted service runs declarative workflows in an isolated browser and returns signed evidence. The free plan allows 100 runs per workspace per day. The service is operated separately and is not open source. |
+
+## Attach + flake
+
+Already have a Playwright suite? You do not need to rewrite it.
+
+```bash
+bun bin/airlock.ts attach .
+npx playwright test --reporter=airlock
+bun bin/airlock.ts flake .airlock/reports --markdown
+```
+
+`attach` writes a reporter into the project without touching your specs; the reporter writes one Airlock manifest per run. `flake` aggregates those manifests, classifies likely causes, and can include request-ledger evidence. See [docs/attach-and-flake.md](docs/attach-and-flake.md).
 
 ## How it works
 

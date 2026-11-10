@@ -924,4 +924,258 @@ ai.command('explain <qaRunId>')
     )()
   );
 
+// COMMAND: ATTACH (P0 — existing Playwright suites)
+// ==========================================
+interface AttachCommandOptions {
+  config?: string;
+  reporterModule?: string;
+  outputDir?: string;
+  force?: boolean;
+  dryRun?: boolean;
+  json?: boolean;
+  determinism?: boolean;
+}
+
+/** In a repo checkout, use the TypeScript reporter directly; installed packages use the compiled path. */
+function localReporterModule(): string | undefined {
+  try {
+    const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+    const candidate = path.join(repoRoot, 'src/testing/airlock-reporter.ts');
+    return fs.existsSync(candidate) ? candidate : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+program
+  .command('attach [projectDir]')
+  .description('Attach the Airlock reporter to an existing Playwright suite without editing its specs (writes a safe wrapper config)')
+  .option('--config <path>', 'Explicit playwright.config.* path (defaults to auto-detect in projectDir)')
+  .option('--reporter-module <module>', 'Reporter module specifier or absolute path (defaults to the local/installed Airlock reporter)')
+  .option('--output-dir <dir>', 'Directory for reporter manifests (default: .airlock/reports)')
+  .option('--force', 'Replace an existing .airlock/playwright.airlock.config.ts')
+  .option('--dry-run', 'Print the plan without writing the wrapper config')
+  .option('--determinism', 'Also generate network record/replay + fixed-clock fixtures via a tsconfig path alias (no spec changes)')
+  .option('--json', 'Print the attach plan as JSON (machine-readable stdout)')
+  .action(async (projectDirArg: string | undefined, opts: AttachCommandOptions) => {
+    const { planAttach, writeAttachPlan } = await import('../src/attach/index.js');
+    if (!opts.json) logger.banner();
+    const projectDir = path.resolve(process.cwd(), projectDirArg || '.');
+    try {
+      const reporterModule = opts.reporterModule || localReporterModule();
+      const plan = planAttach({
+        projectDir,
+        configPath: opts.config,
+        reporterModule,
+        outputDir: opts.outputDir,
+        determinism: opts.determinism === true,
+      });
+      const written = opts.dryRun ? [] : writeAttachPlan(plan, { force: opts.force === true });
+      if (opts.json) {
+        process.stdout.write(
+          JSON.stringify(
+            {
+              projectDir: plan.projectDir,
+              configPath: plan.configPath,
+              wrapperPath: plan.wrapperPath,
+              reporterModule: plan.reporterModule,
+              outputDir: plan.outputDir,
+              determinism: plan.determinism,
+              files: plan.files.map((file) => file.path),
+              written,
+              dryRun: opts.dryRun === true,
+              instructions: plan.instructions,
+            },
+            null,
+            2
+          ) + '\n'
+        );
+        return;
+      }
+      logger.info(`Found Playwright config: ${plan.configPath}`);
+      if (written.length) {
+        logger.success(`Wrote ${written.length} attach file(s):`);
+        for (const file of written) logger.info(`  ${file}`);
+      } else {
+        logger.info('Dry run: no files written. Re-run without --dry-run to write the wrapper.');
+      }
+      logger.info('');
+      logger.info('Next steps:');
+      for (const line of plan.instructions) logger.info(`  • ${line}`);
+      logger.info('');
+      logger.info('Then: airlock flake .airlock/reports');
+      if (plan.determinism) {
+        logger.info('');
+        logger.info('Determinism: seed network once with AIRLOCK_ATTACH_NETWORK=record, commit .airlock/network, then run CI with AIRLOCK_ATTACH_NETWORK=replay.');
+      }
+    } catch (error) {
+      logger.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  });
+
+// ==========================================
+
+// COMMAND: FLAKE (P0 — triage attach manifests)
+// ==========================================
+interface FlakeCommandOptions {
+  json?: boolean;
+  markdown?: boolean;
+  minRuns?: string;
+  threshold?: string;
+  ownerMap?: string;
+  quarantine?: string;
+  failOnFlake?: boolean;
+  ledgerDir?: string;
+}
+
+function renderFlakeTerminal(analysis: {
+  generatedAt: string;
+  reports: number;
+  totalTests: number;
+  flakyTests: number;
+  totals: Record<string, number>;
+  tests: Array<{ title: string; file: string; runs: number; flakeCount: number; classification: string; confidence: string; owner?: string; quarantined: boolean; evidenceTier?: string; ledger?: { requests: number; failures: number; missing: number } }>;
+  quarantine: Array<{ title: string; classification: string; owner?: string }>;
+  warnings: string[];
+}): string {
+  const lines: string[] = [];
+  lines.push(`Flake analysis — ${analysis.reports} report(s), ${analysis.totalTests} test(s), ${analysis.flakyTests} flaky`);
+  lines.push('');
+  const causes = Object.entries(analysis.totals).filter(([, count]) => count > 0);
+  if (causes.length) lines.push('Probable causes: ' + causes.map(([name, count]) => `${name} ${count}`).join(' · '));
+  lines.push('');
+  const rows = analysis.tests.filter((test) => test.flakeCount > 0 || test.quarantined);
+  if (rows.length) {
+    lines.push('Test                                     File                              Runs  Flakes  Cause            Conf    Owner        Quarantine');
+    lines.push('─'.repeat(126));
+    for (const test of rows) {
+      const title = test.title.length > 40 ? test.title.slice(0, 37) + '…' : test.title.padEnd(40);
+      const file = test.file.length > 32 ? '…' + test.file.slice(-31) : test.file.padEnd(32);
+      lines.push(
+        `${title} ${file} ${String(test.runs).padStart(4)} ${String(test.flakeCount).padStart(7)}  ${test.classification.padEnd(16)} ${test.confidence.padEnd(7)} ${(test.owner || '—').padEnd(12)} ${test.quarantined ? 'yes' : 'no'}`
+      );
+    }
+  } else {
+    lines.push('No flaky tests in the analyzed reports.');
+  }
+  const ledgerBacked = analysis.tests.filter(
+    (test) => test.evidenceTier === 'request-ledger' && test.ledger !== undefined && (test.ledger.requests > 0 || test.ledger.failures > 0),
+  ).length;
+  if (ledgerBacked) lines.push('', `Request-ledger evidence: ${ledgerBacked} test(s) backed by recorded traffic (not just error text).`);
+  if (analysis.quarantine.length) {
+    lines.push('');
+    lines.push('Quarantine recommendations (' + analysis.quarantine.length + '):');
+    for (const test of analysis.quarantine) lines.push(`  • ${test.title} — ${test.classification}${test.owner ? ` (${test.owner})` : ''}`);
+  }
+  if (analysis.warnings.length) {
+    lines.push('');
+    for (const warning of analysis.warnings) lines.push(`warning: ${warning}`);
+  }
+  lines.push('');
+  lines.push('Classification is heuristic from recorded error text. Verify before deleting or quarantining a test.');
+  return lines.join('\n');
+}
+
+program
+  .command('flake [path]')
+  .description('Aggregate Airlock reporter manifests and report flaky tests with probable causes, owners and quarantine recommendations')
+  .option('--json', 'Print the analysis as JSON (machine-readable stdout)')
+  .option('--markdown', 'Print a Markdown report suitable for a PR comment')
+  .option('--min-runs <count>', 'Minimum appearances before quarantine is allowed (default 1)')
+  .option('--threshold <rate>', 'Quarantine when flake rate is at least this 0..1 (default 0.2)')
+  .option('--owner-map <file>', 'JSON map of test id and/or file to owner')
+  .option('--quarantine <file>', 'Write quarantine recommendations as JSON')
+  .option('--fail-on-flake', 'Exit 1 when any flaky test is found (for CI)')
+  .option('--ledger-dir <dir>', 'Request ledgers written by the attach determinism fixture (default: sibling .airlock/ledgers)')
+  .action(async (targetPath: string | undefined, opts: FlakeCommandOptions) => {
+    if (opts.json) {
+      const toStderr = (...args: unknown[]) => console.error(...args);
+      console.log = toStderr;
+    }
+    const { readRunReports } = await import('../src/testing/airlock-report.js');
+    const { analyzeFlakiness, renderFlakeMarkdown } = await import('../src/flake/index.js');
+    const { ensureDir, writeJsonFile } = await import('../src/utils/files.js');
+    if (!opts.json) logger.banner();
+
+    const target = targetPath ? path.resolve(process.cwd(), targetPath) : path.resolve(process.cwd(), '.airlock/reports');
+    if (!fs.existsSync(target)) {
+      logger.error(`No Airlock reporter manifests at: ${target}`);
+      logger.info('Attach the reporter first: airlock attach . — then run your suite with the generated wrapper config.');
+      process.exit(1);
+    }
+    let ownerMap: Record<string, string> | undefined;
+    if (opts.ownerMap) {
+      const ownerFile = path.resolve(process.cwd(), opts.ownerMap);
+      if (!fs.existsSync(ownerFile)) {
+        logger.error(`Owner map not found: ${ownerFile}`);
+        process.exit(1);
+      }
+      try {
+        const parsed: unknown = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('owner map must be a JSON object of id/file → owner');
+        ownerMap = parsed as Record<string, string>;
+      } catch (error) {
+        logger.error(`Invalid owner map: ${error instanceof Error ? error.message : String(error)}`);
+        process.exit(1);
+      }
+    }
+
+    const reports = readRunReports(target);
+    if (!reports.length) {
+      logger.error(`No valid Airlock run reports found in: ${target}`);
+      logger.info('Run your suite with the reporter first, or pass a file/directory of .airlock/reports/*.json.');
+      process.exit(1);
+    }
+    const minRuns = opts.minRuns === undefined ? undefined : Number(opts.minRuns);
+    const threshold = opts.threshold === undefined ? undefined : Number(opts.threshold);
+    if (minRuns !== undefined && (!Number.isInteger(minRuns) || minRuns < 1)) {
+      logger.error('--min-runs must be a positive integer');
+      process.exit(1);
+    }
+    if (threshold !== undefined && (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)) {
+      logger.error('--threshold must be between 0 and 1');
+      process.exit(1);
+    }
+
+    let analysis = analyzeFlakiness(reports, { minRuns, flakeThreshold: threshold, ownerMap });
+    const { readFlakeLedgers, applyLedgerEvidence } = await import('../src/flake/index.js');
+    const ledgerDir = opts.ledgerDir
+      ? path.resolve(process.cwd(), opts.ledgerDir)
+      : path.join(path.dirname(target), 'ledgers');
+    const ledgers = readFlakeLedgers(ledgerDir);
+    if (ledgers.length) analysis = applyLedgerEvidence(analysis, ledgers);
+    if (opts.json) {
+      process.stdout.write(JSON.stringify(analysis, null, 2) + '\n');
+    } else if (opts.markdown) {
+      process.stdout.write(renderFlakeMarkdown(analysis) + '\n');
+    } else {
+      process.stdout.write(renderFlakeTerminal(analysis) + '\n');
+    }
+
+    if (opts.quarantine) {
+      const file = path.resolve(process.cwd(), opts.quarantine);
+      ensureDir(path.dirname(file));
+      writeJsonFile(file, {
+        generatedAt: analysis.generatedAt,
+        reports: analysis.reports,
+        tests: analysis.quarantine.map((test) => ({
+          id: test.id,
+          title: test.title,
+          file: test.file,
+          project: test.project,
+          classification: test.classification,
+          confidence: test.confidence,
+          flakeRate: test.flakeRate,
+          owner: test.owner,
+        })),
+      });
+      if (!opts.json) logger.info(`Wrote quarantine recommendations: ${file}`);
+    }
+    if (opts.failOnFlake && analysis.flakyTests > 0) process.exitCode = 1;
+  });
+
+
+// ==========================================
+
 program.parse(process.argv);
