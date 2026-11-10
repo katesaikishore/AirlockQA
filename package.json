@@ -1,6 +1,6 @@
 {
   "name": "airlockqa",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "TypeScript browser testing tools with configurable request policies and signed run evidence",
   "type": "module",
   "main": "dist/src/index.js",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- `airlock --version` reads the package version instead of the stale 1.0.0 literal.
+
 ## 1.2.0
 
 - `verify-merge` runs affected specs, reruns failures, and blocks only reproduced regressions.

@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { Command } from 'commander';
+import { createRequire } from 'node:module';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { chromium } from 'playwright-core';
@@ -20,12 +21,20 @@ import { logger } from '../src/utils/logger.js';
 import { z } from 'zod';
 import type { ComplianceProofBundle, ExecutionTrace } from '../src/types/index.js';
 
+const require = createRequire(import.meta.url);
+const packageVersion = (() => {
+  for (const candidate of ['../package.json', '../../package.json']) {
+    try { return String(require(candidate).version || '0.0.0'); } catch { /* try the next layout */ }
+  }
+  return '0.0.0';
+})();
+
 const program = new Command();
 
 program
   .name('airlock')
   .description('AirlockQA: Zero-Trust, Self-Compiling, Time-Traveling AI QA Engine')
-  .version('1.0.0');
+  .version(packageVersion);
 
 // ==========================================
 // COMMAND: INIT
